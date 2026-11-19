@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { Settings } from "@/components/settings/Settings";
+import { SettingsContent } from "./SettingsContent";
 
 export const metadata: Metadata = { title: "Settings · EXPER" };
 
 export default function SettingsPage() {
-  return <Settings />;
+  return <SettingsContent />;
 }

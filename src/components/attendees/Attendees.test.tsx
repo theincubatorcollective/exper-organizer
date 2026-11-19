@@ -1,11 +1,22 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import { designAttendees } from "@/lib/attendees/mock";
 import { Attendees } from "./Attendees";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+
+function renderAttendees() {
+  return render(
+    <Attendees data={designAttendees()} experienceId="exp-test" />,
+  );
+}
 
 describe("Attendees", () => {
   test("shows the check-in header, metrics and actions", () => {
-    render(<Attendees />);
+    renderAttendees();
     expect(
       screen.getByRole("heading", { level: 1, name: "Attendees / Check-in" }),
     ).toBeInTheDocument();
@@ -21,7 +32,7 @@ describe("Attendees", () => {
   });
 
   test("lists guests from the Figma mock with check-in states", () => {
-    render(<Attendees />);
+    renderAttendees();
     expect(screen.getByRole("heading", { name: /Guest list/ })).toBeInTheDocument();
     expect(screen.getByText("/ Showing 6 of 1,240")).toBeInTheDocument();
     expect(screen.getByText("Ada Okafor")).toBeInTheDocument();
@@ -30,12 +41,15 @@ describe("Attendees", () => {
     expect(screen.getAllByRole("button", { name: "Check in →" })).toHaveLength(2);
     expect(screen.getByText("VIP · Soundscape · NS-0529")).toBeInTheDocument();
     expect(screen.getByText("Page 1 of 207")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Next page/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Next page/ })).toHaveAttribute(
+      "href",
+      "/attendees?page=2&experienceId=exp-test",
+    );
   });
 
   test("filters pending guests", async () => {
     const user = userEvent.setup();
-    render(<Attendees />);
+    renderAttendees();
     await user.click(screen.getByRole("button", { name: "Pending 24" }));
     expect(screen.getByText("Dami Adebayo")).toBeInTheDocument();
     expect(screen.getByText("Bola Akande")).toBeInTheDocument();
@@ -45,9 +59,17 @@ describe("Attendees", () => {
 
   test("searches guests by name", async () => {
     const user = userEvent.setup();
-    render(<Attendees />);
+    renderAttendees();
     await user.type(screen.getByLabelText("Search attendees"), "Kunle");
     expect(screen.getByText("Kunle Bello")).toBeInTheDocument();
     expect(screen.queryByText("Ada Okafor")).not.toBeInTheDocument();
+  });
+
+  test("manual lookup opens the pass code form", async () => {
+    const user = userEvent.setup();
+    renderAttendees();
+    await user.click(screen.getByRole("button", { name: /Manual lookup/ }));
+    expect(screen.getByPlaceholderText("3F9A-C21B-77D0-4E8E")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check in" })).toBeInTheDocument();
   });
 });

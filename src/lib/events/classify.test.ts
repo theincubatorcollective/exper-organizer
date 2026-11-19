@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { sortFor, tabFor } from "./classify";
+import {
+  sortFor,
+  statusFromExperiencePayload,
+  tabFor,
+  tabForExperiencePayload,
+} from "./classify";
 import type { EventRow } from "./types";
 
 const START = "2026-11-10T18:00:00Z";
@@ -28,6 +33,19 @@ describe("tabFor", () => {
   test("published and not yet started is upcoming", () => {
     const now = new Date("2026-11-10T17:59:59Z");
     expect(tabFor({ status: "published", startsAt: START, endsAt: END }, now)).toBe("upcoming");
+  });
+
+  test("accepts Published casing and live/active aliases", () => {
+    const now = new Date("2026-11-10T17:59:59Z");
+    expect(tabFor({ status: "Published", startsAt: START, endsAt: END }, now)).toBe("upcoming");
+    expect(tabFor({ status: "ACTIVE", startsAt: START, endsAt: END }, now)).toBe("upcoming");
+  });
+
+  test("invalid dates keep a published event out of upcoming/live/past", () => {
+    const now = new Date("2026-11-10T17:59:59Z");
+    expect(
+      tabFor({ status: "published", startsAt: "not-a-date", endsAt: END }, now),
+    ).toBe("drafts");
   });
 
   test("is live exactly at the start", () => {
@@ -70,5 +88,48 @@ describe("sortFor", () => {
     const out = sortFor("upcoming", input);
     expect(out).not.toBe(input);
     expect(ids(input)).toEqual(["b", "a"]);
+  });
+});
+
+describe("statusFromExperiencePayload", () => {
+  test("reads status, publishedAt, and nested envelopes", () => {
+    expect(statusFromExperiencePayload({ status: "draft" })).toBe("draft");
+    expect(statusFromExperiencePayload({ status: "Published" })).toBe("published");
+    expect(
+      statusFromExperiencePayload({ publishedAt: "2026-11-17T12:00:00Z" }),
+    ).toBe("published");
+    expect(
+      statusFromExperiencePayload({ data: { state: "published" } }),
+    ).toBe("published");
+  });
+});
+
+describe("tabForExperiencePayload", () => {
+  test("published past dates land on Past, not Upcoming", () => {
+    const now = new Date("2026-11-17T21:00:00Z");
+    expect(
+      tabForExperiencePayload(
+        {
+          status: "published",
+          startsAt: "2026-10-25T19:00:00Z",
+          endsAt: "2026-10-26T02:30:00Z",
+        },
+        now,
+      ),
+    ).toBe("past");
+  });
+
+  test("published future dates land on Upcoming", () => {
+    const now = new Date("2026-11-17T21:00:00Z");
+    expect(
+      tabForExperiencePayload(
+        {
+          status: "published",
+          startsAt: "2026-11-20T19:00:00Z",
+          endsAt: "2026-11-21T02:30:00Z",
+        },
+        now,
+      ),
+    ).toBe("upcoming");
   });
 });

@@ -7,6 +7,7 @@ export function designLiveControl(): LiveControlData {
     eventMeta:
       "Landmark Beach, Lagos · 25 Oct 2026, 21:41 WAT · Africa/Lagos (UTC+01:00)",
     syncLabel: "Synced 2 sec ago",
+    activeMomentId: "moment-dj",
     metrics: [
       { label: "Attendees", value: "1,240", detail: "registered people" },
       { label: "Checked in", value: "1,216", detail: "24 pending arrival" },

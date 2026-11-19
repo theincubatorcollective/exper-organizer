@@ -30,6 +30,8 @@ export type RunOfShowItem = {
 };
 
 export type EventDraft = {
+  /** Backend experience id once created; null while the draft is local-only. */
+  experienceId: string | null;
   title: string;
   description: string;
   category: string;

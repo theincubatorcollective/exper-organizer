@@ -1,17 +1,27 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { buttonClasses } from "@/components/auth/Button";
 import { Card } from "@/components/overview/Card";
-import { designLiveControl } from "@/lib/live-control/mock";
+import { closeLiveMoment } from "@/lib/live-control/api";
+import type { LiveControlData } from "@/lib/live-control/types";
 import { sparklinePath } from "@/lib/overview/sparkline";
 
 type StreamTab = "newest" | "laughed" | "flagged";
 
-export function LiveControl() {
-  const data = designLiveControl();
+export function LiveControl({
+  data,
+  experienceId,
+}: {
+  data: LiveControlData;
+  experienceId: string;
+}) {
+  const router = useRouter();
   const [streamTab, setStreamTab] = useState<StreamTab>("newest");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const flaggedCount = data.responses.filter((item) => item.flagged).length;
   const responses =
     streamTab === "flagged"
@@ -19,6 +29,22 @@ export function LiveControl() {
       : streamTab === "laughed"
         ? [...data.responses].sort((a, b) => b.laughs - a.laughs)
         : data.responses;
+
+  async function endActivePrompt() {
+    if (!data.activeMomentId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await closeLiveMoment(experienceId, data.activeMomentId);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -55,6 +81,11 @@ export function LiveControl() {
             End event…
           </button>
         </div>
+        {error ? (
+          <p role="alert" className="text-[11px] text-red-400">
+            {error}
+          </p>
+        ) : null}
       </header>
 
       <section
@@ -79,7 +110,13 @@ export function LiveControl() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.9fr)] xl:items-start">
         <div className="flex min-w-0 flex-col gap-6">
-          <LivePromptCard data={data.livePrompt} />
+          <LivePromptCard
+            data={data.livePrompt}
+            canClose={Boolean(data.activeMomentId)}
+            busy={busy}
+            onEnd={() => void endActivePrompt()}
+            onSendNext={() => void endActivePrompt()}
+          />
           <ResponseStream
             count={data.responses.length}
             flagged={flaggedCount}
@@ -109,10 +146,19 @@ export function LiveControl() {
 
 function LivePromptCard({
   data,
+  canClose,
+  busy,
+  onEnd,
+  onSendNext,
 }: {
-  data: ReturnType<typeof designLiveControl>["livePrompt"];
+  data: LiveControlData["livePrompt"];
+  canClose: boolean;
+  busy: boolean;
+  onEnd: () => void;
+  onSendNext: () => void;
 }) {
-  const progress = Math.min((data.answered / data.active) * 100, 100);
+  const progress =
+    data.active > 0 ? Math.min((data.answered / data.active) * 100, 100) : 0;
 
   return (
     <Card>
@@ -166,19 +212,27 @@ function LivePromptCard({
         </button>
         <button
           type="button"
-          aria-disabled="true"
-          className={buttonClasses("secondary", "cursor-not-allowed gap-2")}
+          disabled={!canClose || busy}
+          onClick={onEnd}
+          className={buttonClasses(
+            "secondary",
+            !canClose || busy ? "cursor-not-allowed gap-2 opacity-50" : "gap-2",
+          )}
         >
           <StopIcon />
-          End prompt
+          {busy ? "Ending…" : "End prompt"}
         </button>
         <button
           type="button"
-          aria-disabled="true"
-          className={buttonClasses("primary", "cursor-not-allowed gap-2")}
+          disabled={!canClose || busy}
+          onClick={onSendNext}
+          className={buttonClasses(
+            "primary",
+            !canClose || busy ? "cursor-not-allowed gap-2 opacity-50" : "gap-2",
+          )}
         >
           <SendNextIcon />
-          Send next
+          {busy ? "Sending…" : "Send next"}
         </button>
       </div>
       <p className="mt-3 text-[11px] leading-relaxed text-muted">
@@ -199,7 +253,7 @@ function ResponseStream({
   flagged: number;
   tab: StreamTab;
   onTabChange: (tab: StreamTab) => void;
-  responses: ReturnType<typeof designLiveControl>["responses"];
+  responses: LiveControlData["responses"];
 }) {
   const tabs: { id: StreamTab; label: string }[] = [
     { id: "newest", label: "Newest" },
@@ -260,7 +314,7 @@ function ResponseStream({
 function PromptQueueCard({
   items,
 }: {
-  items: ReturnType<typeof designLiveControl>["queue"];
+  items: LiveControlData["queue"];
 }) {
   return (
     <Card title="Prompt queue" aside="/ Manual send">
@@ -294,7 +348,7 @@ function PromptQueueCard({
 function PollResultsCard({
   poll,
 }: {
-  poll: ReturnType<typeof designLiveControl>["poll"];
+  poll: LiveControlData["poll"];
 }) {
   return (
     <Card title={poll.title} aside={poll.closedLabel}>
@@ -336,7 +390,7 @@ function PollResultsCard({
 function PhotoModerationCard({
   photo,
 }: {
-  photo: ReturnType<typeof designLiveControl>["photo"];
+  photo: LiveControlData["photo"];
 }) {
   return (
     <Card title="Photo moderation" aside={`${photo.pending} pending`}>
@@ -389,9 +443,12 @@ function PhotoModerationCard({
 function ParticipationCard({
   data,
 }: {
-  data: ReturnType<typeof designLiveControl>["participation"];
+  data: LiveControlData["participation"];
 }) {
-  const width = Math.min((data.active / data.checkedIn) * 100, 100);
+  const width =
+    data.checkedIn > 0
+      ? Math.min((data.active / data.checkedIn) * 100, 100)
+      : 0;
   return (
     <Card title="Participation" aside="Last 5 min">
       <div className="mt-4 flex items-center justify-between gap-3 text-[11px]">
@@ -434,7 +491,7 @@ function ParticipationCard({
 function RoomFeelCard({
   data,
 }: {
-  data: ReturnType<typeof designLiveControl>["roomFeel"];
+  data: LiveControlData["roomFeel"];
 }) {
   const width = 300;
   const height = 60;
@@ -489,7 +546,7 @@ function RoomFeelCard({
 function LeaderboardCard({
   entries,
 }: {
-  entries: ReturnType<typeof designLiveControl>["leaderboard"];
+  entries: LiveControlData["leaderboard"];
 }) {
   return (
     <Card title="Public leaderboard" aside="Individuals">
@@ -524,7 +581,7 @@ function LeaderboardCard({
 function SquadScoresCard({
   squads,
 }: {
-  squads: ReturnType<typeof designLiveControl>["squads"];
+  squads: LiveControlData["squads"];
 }) {
   return (
     <Card title="Private squad scores" aside="Not public">
@@ -552,7 +609,7 @@ function SquadScoresCard({
 function ArrivalsCard({
   arrivals,
 }: {
-  arrivals: ReturnType<typeof designLiveControl>["arrivals"];
+  arrivals: LiveControlData["arrivals"];
 }) {
   return (
     <Card title="Arrivals" aside="Main entrance">
@@ -587,7 +644,7 @@ function ArrivalsCard({
 function RemindersCard({
   reminders,
 }: {
-  reminders: ReturnType<typeof designLiveControl>["reminders"];
+  reminders: LiveControlData["reminders"];
 }) {
   return (
     <Card title="Reminders" aside={`${reminders.length} scheduled`}>
@@ -617,7 +674,7 @@ function RemindersCard({
 function IncidentsCard({
   incidents,
 }: {
-  incidents: ReturnType<typeof designLiveControl>["incidents"];
+  incidents: LiveControlData["incidents"];
 }) {
   return (
     <Card title="Incident log" aside="1 open">

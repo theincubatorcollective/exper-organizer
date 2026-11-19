@@ -3,6 +3,7 @@ import type { EventDraft } from "./types";
 /** Figma Neon Solstice draft used across the Event setup flow. */
 export function designEventDraft(): EventDraft {
   return {
+    experienceId: null,
     title: "Neon Solstice",
     description:
       "Where kinetic light, spatial sound, and human presence fuse into a living collective pulse.",

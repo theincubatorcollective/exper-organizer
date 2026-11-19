@@ -1,11 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test } from "vitest";
+import { designSales } from "@/lib/sales/mock";
 import { Sales } from "./Sales";
+
+function renderSales() {
+  return render(<Sales data={designSales()} experienceId="exp-test" />);
+}
 
 describe("Sales", () => {
   test("shows the sales header, currencies and metrics", () => {
-    render(<Sales />);
+    renderSales();
     expect(screen.getByRole("heading", { level: 1, name: "Sales" })).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -24,7 +29,7 @@ describe("Sales", () => {
   });
 
   test("shows access sold, capacity, recent orders and ledgers", () => {
-    render(<Sales />);
+    renderSales();
     expect(screen.getByRole("heading", { name: /Access sold/ })).toBeInTheDocument();
     expect(screen.getByText("/ 1,240 guest places")).toBeInTheDocument();
     expect(screen.getByText("General Access")).toBeInTheDocument();
@@ -57,7 +62,7 @@ describe("Sales", () => {
 
   test("currency pills can switch active state", async () => {
     const user = userEvent.setup();
-    render(<Sales />);
+    renderSales();
     await user.click(screen.getByRole("button", { name: "USD" }));
     expect(screen.getByRole("button", { name: "USD" })).toHaveAttribute(
       "aria-pressed",

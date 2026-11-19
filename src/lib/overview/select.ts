@@ -1,9 +1,10 @@
+import { isPublishedStatus } from "@/lib/events/classify";
 import type { EventSummary, Hero } from "./types";
 
 const time = (iso: string) => Date.parse(iso);
 const byStart = (a: EventSummary, b: EventSummary) =>
   time(a.startsAt) - time(b.startsAt);
-const isPublished = (event: EventSummary) => event.status === "published";
+const isPublished = (event: EventSummary) => isPublishedStatus(event.status);
 
 export function selectHero(events: EventSummary[], now: Date): Hero | null {
   const t = now.getTime();

@@ -63,6 +63,8 @@ export type LiveControlData = {
   eventTitle: string;
   eventMeta: string;
   syncLabel: string;
+  /** Backend moment id for the live prompt, when one is running. */
+  activeMomentId: string | null;
   metrics: LiveMetric[];
   livePrompt: {
     indexLabel: string;

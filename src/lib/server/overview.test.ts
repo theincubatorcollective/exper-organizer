@@ -61,6 +61,8 @@ function guestPage(url: URL, total: number) {
 
 type Routes = {
   me?: () => Response;
+  workspace?: () => Response;
+  experiences?: () => Response;
   detail?: (experienceId: string) => Response;
   guests?: (url: URL) => Response;
 };
@@ -83,6 +85,17 @@ function stubBackend(routes: Routes) {
       calls.push({ url, authorization: headers.get("authorization") });
       const path = url.pathname.replace("/api/v1", "");
       if (path === "/organizer/me") return (routes.me ?? (() => json(me)))();
+      if (path === "/organizer/workspace") {
+        return (
+          routes.workspace ??
+          (() => json({ id: "w1", name: "Afterhours studio" }))
+        )();
+      }
+      if (path === "/organizer/experiences") {
+        return (
+          routes.experiences ?? (() => json({ data: me.data }))
+        )();
+      }
       if (path.endsWith("/guests")) {
         return (routes.guests ?? ((u) => json(guestPage(u, 3))))(url);
       }
@@ -139,14 +152,26 @@ describe("getOverview", () => {
   });
 
   test("maps 401 to unauthorized and 403 to forbidden", async () => {
-    stubBackend({ me: () => json({ message: "Unauthorized" }, 401) });
-    expect(await getOverview(now)).toMatchObject({ ok: false, reason: "unauthorized" });
-    stubBackend({ me: () => json({ message: "Not an organizer" }, 403) });
-    expect(await getOverview(now)).toMatchObject({ ok: false, reason: "forbidden" });
+    stubBackend({
+      experiences: () => json({ message: "Unauthorized" }, 401),
+    });
+    expect(await getOverview(now)).toMatchObject({
+      ok: false,
+      reason: "unauthorized",
+    });
+    stubBackend({
+      experiences: () => json({ message: "Not an organizer" }, 403),
+    });
+    expect(await getOverview(now)).toMatchObject({
+      ok: false,
+      reason: "forbidden",
+    });
   });
 
   test("maps other failures to an error with the backend message", async () => {
-    stubBackend({ me: () => json({ message: "Database down" }, 500) });
+    stubBackend({
+      experiences: () => json({ message: "Database down" }, 500),
+    });
     expect(await getOverview(now)).toEqual({
       ok: false,
       reason: "error",
@@ -154,17 +179,48 @@ describe("getOverview", () => {
     });
   });
 
-  test("with nothing live or upcoming there is no hero and no extra requests", async () => {
-    stubBackend({ me: () => json({ ...me, data: [] }) });
+  test("with nothing live or upcoming there is no hero and no detail requests", async () => {
+    stubBackend({ experiences: () => json({ data: [] }) });
     const result = await getOverview(now);
     if (!result.ok) throw new Error("expected ok");
     expect(result.data.hero).toBeNull();
     expect(result.data.comingUp).toEqual({ items: [], total: 0 });
-    expect(calls).toHaveLength(1);
+    const paths = calls.map((c) => c.url.pathname.replace("/api/v1", ""));
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        "/organizer/workspace",
+        "/organizer/experiences",
+        "/organizer/me",
+      ]),
+    );
+    expect(paths.every((p) => !p.match(/\/experiences\/[^/]+$/))).toBe(true);
+  });
+
+  test("prefers the workspace endpoint name over /me", async () => {
+    stubBackend({
+      workspace: () => json({ id: "w1", name: "Studio from workspace" }),
+      me: () => json({ ...me, workspace: { id: "w1", name: "Studio from me" } }),
+    });
+    const result = await getOverview(now);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.data.workspaceName).toBe("Studio from workspace");
+  });
+
+  test("falls back to /me workspace when workspace fetch fails", async () => {
+    stubBackend({
+      workspace: () => json({ message: "missing" }, 404),
+      me: () => json({ ...me, workspace: { id: "w1", name: "Afterhours studio" } }),
+    });
+    const result = await getOverview(now);
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.data.workspaceName).toBe("Afterhours studio");
   });
 
   test("a user without a workspace still gets an overview", async () => {
-    stubBackend({ me: () => json({ ...me, workspace: null }) });
+    stubBackend({
+      workspace: () => json({ message: "missing" }, 404),
+      me: () => json({ ...me, workspace: null }),
+    });
     const result = await getOverview(now);
     if (!result.ok) throw new Error("expected ok");
     expect(result.data.workspaceName).toBeNull();
@@ -229,7 +285,10 @@ describe("getShellIdentity", () => {
   test("is unauthorized without a session cookie", async () => {
     jar.clear();
     stubBackend({});
-    expect(await getShellIdentity()).toMatchObject({ ok: false, reason: "unauthorized" });
+    expect(await getShellIdentity()).toMatchObject({
+      ok: false,
+      reason: "unauthorized",
+    });
   });
 
   test("returns the workspace and user names", async () => {
@@ -238,6 +297,10 @@ describe("getShellIdentity", () => {
       ok: true,
       data: { workspaceName: "Afterhours studio", userName: "Tope Adewale" },
     });
+    const paths = calls.map((c) => c.url.pathname.replace("/api/v1", ""));
+    expect(paths).toEqual(
+      expect.arrayContaining(["/organizer/workspace", "/organizer/me"]),
+    );
   });
 
   test("falls back to the email when the user has no name", async () => {

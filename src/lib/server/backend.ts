@@ -11,7 +11,7 @@ export type BackendResult<T> =
   | BackendFailure;
 
 type BackendInit = {
-  method?: "GET" | "POST" | "PATCH";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   bearer?: string;
   userAgent?: string | null;

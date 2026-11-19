@@ -1,9 +1,14 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import type { EventRow } from "@/lib/events/types";
 import { EventsBrowser } from "./EventsBrowser";
 import { EventsSkeleton } from "./EventsSkeleton";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 const NOW = "2026-11-06T12:00:00Z";
 
@@ -165,7 +170,7 @@ describe("EventsBrowser", () => {
     renderBrowser();
     expect(screen.getByRole("link", { name: "Create event" })).toHaveAttribute(
       "href",
-      "/events/setup/basics",
+      "/events/setup/basics?new=1",
     );
     expect(screen.getByRole("button", { name: "Calendar view" })).toHaveAttribute(
       "aria-disabled",
@@ -173,9 +178,15 @@ describe("EventsBrowser", () => {
     );
     const manage = screen.getAllByRole("link", { name: "Manage event" });
     expect(manage).toHaveLength(3);
-    for (const link of manage) {
-      expect(link).toHaveAttribute("href", "/events/setup/basics");
-    }
+    expect(manage[0]).toHaveAttribute("href", expect.stringMatching(/\?id=/));
+  });
+
+  test("Drafts show a Publish action", async () => {
+    const user = userEvent.setup();
+    renderBrowser();
+    await user.click(screen.getByRole("button", { name: "Drafts" }));
+    expect(screen.getByRole("button", { name: "Publish" })).toBeEnabled();
+    expect(screen.getByText("Draft")).toBeInTheDocument();
   });
 
   test("shows the page title, subtitle and timezone note", () => {

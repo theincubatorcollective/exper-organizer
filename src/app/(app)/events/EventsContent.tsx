@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { buttonClasses } from "@/components/auth/Button";
 import { EventsBrowser } from "@/components/events/EventsBrowser";
 import { Card } from "@/components/overview/Card";
-import { designEventsData } from "@/lib/events/mock";
 import { getEvents } from "@/lib/server/events";
 
 export async function EventsContent() {
@@ -34,9 +33,5 @@ export async function EventsContent() {
     );
   }
 
-  // Design phase: when the API has nothing yet, show the Figma populated list.
-  const data =
-    result.data.events.length > 0 ? result.data : designEventsData();
-
-  return <EventsBrowser {...data} />;
+  return <EventsBrowser {...result.data} />;
 }

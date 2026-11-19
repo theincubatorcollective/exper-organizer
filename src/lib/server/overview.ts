@@ -9,6 +9,13 @@ import type {
   Overview,
 } from "@/lib/overview/types";
 import { backendFetch, type BackendFailure } from "./backend";
+import {
+  experiencesFrom,
+  getOrganizerMe,
+  getWorkspace,
+  listExperiences,
+  workspaceNameFrom,
+} from "./organizer";
 import { COOKIE } from "./session";
 
 // The guests endpoint caps a page at 50; 40 pages covers 2,000 guests.
@@ -24,12 +31,6 @@ export type OverviewResult = { ok: true; data: Overview } | Failure;
 export type ShellIdentityResult =
   | { ok: true; data: { workspaceName: string | null; userName: string | null } }
   | Failure;
-
-type MeResponse = {
-  user: { fullName: string | null; email: string | null };
-  workspace: { id: string; name: string } | null;
-  data: EventSummary[];
-};
 
 type DetailResponse = {
   coverImageUrl: string | null;
@@ -150,10 +151,18 @@ export async function getOverview(now?: Date): Promise<OverviewResult> {
   // before request-time data is a prerender error.
   const at = now ?? new Date();
 
-  const me = await backendFetch<MeResponse>("/organizer/me", { bearer });
+  // Workspace + experiences are the organizer sources of truth; /me is only
+  // for the signed-in person's display name (Auth UI is left alone).
+  const [workspace, experiences, me] = await Promise.all([
+    getWorkspace(bearer),
+    listExperiences(bearer),
+    getOrganizerMe(bearer),
+  ]);
+  if (!experiences.ok) return toFailure(experiences);
   if (!me.ok) return toFailure(me);
 
-  const { user, workspace, data: events } = me.data;
+  const events = experiencesFrom(experiences);
+  const { user } = me.data;
   const picked = selectHero(events, at);
   const comingUp = selectComingUp(events, picked?.event.id ?? null, at);
 
@@ -166,7 +175,7 @@ export async function getOverview(now?: Date): Promise<OverviewResult> {
     ok: true,
     data: {
       user: { fullName: user.fullName ?? null, email: user.email ?? null },
-      workspaceName: workspace?.name ?? null,
+      workspaceName: workspaceNameFrom(workspace, me.data),
       hero,
       comingUp: { items, total: comingUp.total },
       mock: mockOverview(),
@@ -178,13 +187,16 @@ export async function getShellIdentity(): Promise<ShellIdentityResult> {
   const bearer = await readToken();
   if (!bearer) return UNAUTHORIZED;
 
-  const me = await backendFetch<MeResponse>("/organizer/me", { bearer });
+  const [workspace, me] = await Promise.all([
+    getWorkspace(bearer),
+    getOrganizerMe(bearer),
+  ]);
   if (!me.ok) return toFailure(me);
 
   return {
     ok: true,
     data: {
-      workspaceName: me.data.workspace?.name ?? null,
+      workspaceName: workspaceNameFrom(workspace, me.data),
       userName: me.data.user.fullName ?? me.data.user.email ?? null,
     },
   };

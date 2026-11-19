@@ -1,17 +1,30 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useMemo, useState, type FormEvent } from "react";
 import { buttonClasses } from "@/components/auth/Button";
 import { Card } from "@/components/overview/Card";
-import { designAttendees } from "@/lib/attendees/mock";
-import type { Guest } from "@/lib/attendees/types";
+import { checkInGuest, outcomeMessage } from "@/lib/attendees/api";
+import type { AttendeesData, Guest } from "@/lib/attendees/types";
 
 type FilterTab = "all" | "pending" | "checked-in";
 
-export function Attendees() {
-  const data = designAttendees();
+export function Attendees({
+  data,
+  experienceId,
+}: {
+  data: AttendeesData;
+  experienceId: string;
+}) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterTab>("all");
+  const [lookupOpen, setLookupOpen] = useState(false);
+  const [lookupCode, setLookupCode] = useState("");
+  const [busyCode, setBusyCode] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const guests = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -21,7 +34,8 @@ export function Attendees() {
       if (!q) return true;
       return (
         guest.name.toLowerCase().includes(q) ||
-        guest.ticket.toLowerCase().includes(q)
+        guest.ticket.toLowerCase().includes(q) ||
+        (guest.code?.toLowerCase().includes(q) ?? false)
       );
     });
   }, [data.guests, filter, query]);
@@ -40,6 +54,37 @@ export function Attendees() {
       label: `Checked In ${data.totals.checkedIn.toLocaleString("en-GB")}`,
     },
   ];
+
+  async function runCheckIn(code: string) {
+    const trimmed = code.trim();
+    if (!trimmed) {
+      setError("Enter a pass code.");
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    setBusyCode(trimmed);
+    try {
+      const result = await checkInGuest(experienceId, trimmed);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      setMessage(outcomeMessage(result.data));
+      setLookupCode("");
+      setLookupOpen(false);
+      router.refresh();
+    } finally {
+      setBusyCode(null);
+    }
+  }
+
+  function pageHref(nextPage: number) {
+    const params = new URLSearchParams();
+    params.set("page", String(nextPage));
+    params.set("experienceId", experienceId);
+    return `/attendees?${params.toString()}`;
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -73,16 +118,24 @@ export function Attendees() {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          aria-disabled="true"
-          className={buttonClasses("primary", "cursor-not-allowed gap-2")}
+          onClick={() => {
+            setLookupOpen(true);
+            setError(null);
+            setMessage(null);
+          }}
+          className={buttonClasses("primary", "gap-2")}
         >
           <QrIcon />
           Scan QR ticket
         </button>
         <button
           type="button"
-          aria-disabled="true"
-          className={buttonClasses("secondary", "cursor-not-allowed gap-2")}
+          onClick={() => {
+            setLookupOpen(true);
+            setError(null);
+            setMessage(null);
+          }}
+          className={buttonClasses("secondary", "gap-2")}
         >
           <SearchIcon />
           Manual lookup
@@ -96,6 +149,55 @@ export function Attendees() {
           Export guest list
         </button>
       </div>
+
+      {lookupOpen ? (
+        <form
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault();
+            void runCheckIn(lookupCode);
+          }}
+          className="flex flex-col gap-3 rounded-3xl bg-surface p-5 sm:flex-row sm:items-end"
+        >
+          <label className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="text-[10px] text-muted">Pass code</span>
+            <input
+              value={lookupCode}
+              onChange={(e) => setLookupCode(e.target.value)}
+              placeholder="3F9A-C21B-77D0-4E8E"
+              autoFocus
+              className="rounded-2xl bg-surface-2 px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={!!busyCode}
+              className={buttonClasses("primary", "disabled:opacity-50")}
+            >
+              {busyCode ? "Checking…" : "Check in"}
+            </button>
+            <button
+              type="button"
+              disabled={!!busyCode}
+              onClick={() => setLookupOpen(false)}
+              className={buttonClasses("secondary", "disabled:opacity-50")}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {message ? (
+        <p role="status" className="text-[11px] text-accent">
+          {message}
+        </p>
+      ) : null}
+      {error ? (
+        <p role="alert" className="text-[11px] text-red-400">
+          {error}
+        </p>
+      ) : null}
 
       <label className="flex min-h-[4.8rem] w-full flex-col justify-center gap-1 rounded-[1.25rem] border border-accent bg-surface-2 px-5 py-3">
         <span className="text-[10px] text-muted">Search attendees</span>
@@ -131,24 +233,48 @@ export function Attendees() {
         title="Guest list"
         aside={`/ Showing ${guests.length} of ${data.totals.all.toLocaleString("en-GB")}`}
       >
-        <ul className="mt-5 flex flex-col">
-          {guests.map((guest) => (
-            <GuestRow key={guest.id} guest={guest} />
-          ))}
-        </ul>
+        {guests.length === 0 ? (
+          <p className="mt-5 text-sm text-muted">No guests on this page.</p>
+        ) : (
+          <ul className="mt-5 flex flex-col">
+            {guests.map((guest) => (
+              <GuestRow
+                key={guest.id}
+                guest={guest}
+                busy={busyCode !== null}
+                onCheckIn={(code) => void runCheckIn(code)}
+                onNeedCode={() => {
+                  setLookupOpen(true);
+                  setError(null);
+                  setMessage(null);
+                }}
+              />
+            ))}
+          </ul>
+        )}
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <p className="text-[11px] text-muted">
             {`Page ${data.page} of ${data.pageCount}`}
           </p>
-          <button
-            type="button"
-            aria-disabled="true"
-            className={buttonClasses("secondary", "cursor-not-allowed gap-2")}
-          >
-            Next page
-            <span aria-hidden>→</span>
-          </button>
+          {data.page < data.pageCount ? (
+            <Link
+              href={pageHref(data.page + 1)}
+              className={buttonClasses("secondary", "gap-2")}
+            >
+              Next page
+              <span aria-hidden>→</span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              aria-disabled="true"
+              className={buttonClasses("secondary", "cursor-not-allowed gap-2")}
+            >
+              Next page
+              <span aria-hidden>→</span>
+            </button>
+          )}
         </div>
       </Card>
 
@@ -157,7 +283,17 @@ export function Attendees() {
   );
 }
 
-function GuestRow({ guest }: { guest: Guest }) {
+function GuestRow({
+  guest,
+  busy,
+  onCheckIn,
+  onNeedCode,
+}: {
+  guest: Guest;
+  busy: boolean;
+  onCheckIn: (code: string) => void;
+  onNeedCode: () => void;
+}) {
   return (
     <li className="border-b border-border/50 py-4 last:border-b-0">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
@@ -165,19 +301,38 @@ function GuestRow({ guest }: { guest: Guest }) {
           <p className="text-sm font-medium">{guest.name}</p>
           <p className="mt-1 text-[11px] text-muted">{guest.ticket}</p>
         </div>
-        <GuestStatusLabel guest={guest} />
+        <GuestStatusLabel
+          guest={guest}
+          busy={busy}
+          onCheckIn={onCheckIn}
+          onNeedCode={onNeedCode}
+        />
       </div>
     </li>
   );
 }
 
-function GuestStatusLabel({ guest }: { guest: Guest }) {
+function GuestStatusLabel({
+  guest,
+  busy,
+  onCheckIn,
+  onNeedCode,
+}: {
+  guest: Guest;
+  busy: boolean;
+  onCheckIn: (code: string) => void;
+  onNeedCode: () => void;
+}) {
   if (guest.status === "pending") {
     return (
       <button
         type="button"
-        aria-disabled="true"
-        className="shrink-0 text-sm font-medium text-accent"
+        disabled={busy}
+        onClick={() => {
+          if (guest.code) onCheckIn(guest.code);
+          else onNeedCode();
+        }}
+        className="shrink-0 text-sm font-medium text-accent disabled:opacity-50"
       >
         Check in →
       </button>

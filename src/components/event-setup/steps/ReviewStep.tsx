@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Card } from "@/components/overview/Card";
+import { formatEventLabelShort } from "@/lib/event-setup/datetime";
 import { totalGuestCapacity } from "@/lib/event-setup/mock";
 import { useEventSetup } from "../EventSetupProvider";
 import { SetupField, SetupSelect } from "../SetupField";
@@ -38,7 +39,7 @@ export function ReviewStep() {
           <ReviewBlock
             title="Date & venue"
             href="/events/setup/date-venue"
-            body={`25 Oct, 20:00 → 26 Oct, 03:30 WAT\n${draft.venueName} · ${draft.city} · ${draft.timezone} (UTC+01:00)`}
+            body={`${formatEventLabelShort(draft.startLabel)} → ${formatEventLabelShort(draft.endLabel)} WAT\n${draft.venueName} · ${draft.city} · ${draft.timezone}`}
           />
           <ReviewBlock
             title="Access"

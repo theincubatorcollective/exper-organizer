@@ -116,17 +116,18 @@ describe("OverviewContent", () => {
     );
   });
 
-  test("with no API events it fills the Figma design state and keeps the rest", async () => {
+  test("with no API events it shows an empty hero state, not Figma fixtures", async () => {
     getOverview.mockResolvedValue({
       ok: true,
       data: { ...full, hero: null, comingUp: { items: [], total: 0 } },
     });
     render(await OverviewContent());
+    expect(screen.getByText("No live or upcoming event yet.")).toBeInTheDocument();
+    expect(screen.getByText("No upcoming events yet.")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Neon Solstice." }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Sound/Scape")).toBeInTheDocument();
-    expect(screen.getByText("4 events")).toBeInTheDocument();
+      screen.queryByRole("heading", { name: "Neon Solstice." }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Team activity" })).toBeInTheDocument();
   });
 });
+

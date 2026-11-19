@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { buttonClasses } from "@/components/auth/Button";
 import { ActionButton } from "@/components/overview/ActionButton";
@@ -8,6 +9,12 @@ import { Card } from "@/components/overview/Card";
 import { cities, filterEvents } from "@/lib/events/filter";
 import type { EventTab, EventsData } from "@/lib/events/types";
 import { EventRowItem } from "./EventRowItem";
+
+const TAB_IDS: EventTab[] = ["upcoming", "live", "past", "drafts"];
+
+function initialTab(param: string | null): EventTab {
+  return TAB_IDS.includes(param as EventTab) ? (param as EventTab) : "upcoming";
+}
 
 const TABS: { id: EventTab; label: string; empty: string }[] = [
   { id: "upcoming", label: "Upcoming", empty: "No upcoming events." },
@@ -48,23 +55,46 @@ function CalendarIcon() {
 }
 
 export function EventsBrowser({ events, nowIso, truncated }: EventsData) {
-  const [tab, setTab] = useState<EventTab>("upcoming");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<EventTab>(() =>
+    initialTab(searchParams.get("tab")),
+  );
   const [query, setQuery] = useState("");
   const [city, setCity] = useState("");
+  const now = new Date(nowIso);
+
+  function selectTab(next: EventTab) {
+    setTab(next);
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "upcoming") params.delete("tab");
+    else params.set("tab", next);
+    const queryString = params.toString();
+    router.replace(queryString ? `/events?${queryString}` : "/events", {
+      scroll: false,
+    });
+  }
 
   const current = TABS.find((t) => t.id === tab) ?? TABS[0];
   const shown = filterEvents(
     events,
     { tab, query, city: city || null },
-    new Date(nowIso),
+    now,
   );
+  const pastCount = filterEvents(
+    events,
+    { tab: "past", query: "", city: null },
+    now,
+  ).length;
   const filtering = query.trim() !== "" || city !== "";
   const emptyMessage =
     events.length === 0
       ? "No events yet. Events you create will show up here."
       : filtering
         ? "No events match your search."
-        : current.empty;
+        : tab === "upcoming" && pastCount > 0
+          ? "No upcoming events. Published events that already ended are under Past."
+          : current.empty;
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -79,7 +109,7 @@ export function EventsBrowser({ events, nowIso, truncated }: EventsData) {
           </p>
         </div>
         <div className="shrink-0 sm:pt-1">
-          <Link href="/events/setup/basics" className={buttonClasses("primary", "gap-2")}>
+          <Link href="/events/setup/basics?new=1" className={buttonClasses("primary", "gap-2")}>
             <span aria-hidden>+</span>
             Create event
           </Link>
@@ -92,7 +122,7 @@ export function EventsBrowser({ events, nowIso, truncated }: EventsData) {
             key={id}
             type="button"
             aria-pressed={tab === id}
-            onClick={() => setTab(id)}
+            onClick={() => selectTab(id)}
             className={`rounded-full px-5 py-2.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
               tab === id
                 ? "bg-accent text-accent-fg"

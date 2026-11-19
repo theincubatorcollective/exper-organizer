@@ -1,11 +1,22 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import { designLiveControl } from "@/lib/live-control/mock";
 import { LiveControl } from "./LiveControl";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
+
+function renderLive() {
+  return render(
+    <LiveControl data={designLiveControl()} experienceId="exp-test" />,
+  );
+}
 
 describe("LiveControl", () => {
   test("shows the live header, metrics and active prompt with side timer", () => {
-    render(<LiveControl />);
+    renderLive();
     expect(
       screen.getByRole("heading", { level: 1, name: "Live Control" }),
     ).toBeInTheDocument();
@@ -29,8 +40,8 @@ describe("LiveControl", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Pause$/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /End prompt/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Send next/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /End prompt/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Send next/ })).toBeEnabled();
     expect(
       screen.getByText(
         "Sending next closes this prompt first. Attendees keep their submitted answers.",
@@ -39,7 +50,7 @@ describe("LiveControl", () => {
   });
 
   test("prompt queue shows upcoming items and manual send", () => {
-    render(<LiveControl />);
+    renderLive();
     expect(screen.getByRole("heading", { name: /Prompt queue/ })).toBeInTheDocument();
     expect(screen.getByText("/ Manual send")).toBeInTheDocument();
     expect(screen.getByText(/Find Something Blue/)).toBeInTheDocument();
@@ -56,7 +67,7 @@ describe("LiveControl", () => {
 
   test("response stream can switch to flagged answers", async () => {
     const user = userEvent.setup();
-    render(<LiveControl />);
+    renderLive();
     await user.click(screen.getByRole("button", { name: "Flagged 2" }));
     expect(
       screen.getByText("Pretending the playlist is intentional."),
@@ -67,7 +78,7 @@ describe("LiveControl", () => {
   });
 
   test("poll, photo and lower panels match the Figma structure", () => {
-    render(<LiveControl />);
+    renderLive();
     expect(screen.getByText("Closed · 21:32")).toBeInTheDocument();
     expect(screen.getByText("Voice notes")).toBeInTheDocument();
     expect(screen.getByText("Consent given · Waiting for review")).toBeInTheDocument();

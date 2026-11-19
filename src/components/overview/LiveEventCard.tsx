@@ -2,7 +2,6 @@ import Link from "next/link";
 import { buttonClasses } from "@/components/auth/Button";
 import { formatEventWindow, utcOffset } from "@/lib/overview/format";
 import type { Overview } from "@/lib/overview/types";
-import { ActionButton } from "./ActionButton";
 import { Card } from "./Card";
 
 const count = (n: number) => n.toLocaleString("en-GB");
@@ -77,13 +76,20 @@ export function LiveEventCard({
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3">
-          <Link href="/live-control" className={buttonClasses("primary", "gap-2")}>
+          <Link
+            href={`/live-control?experienceId=${event.id}`}
+            className={buttonClasses("primary", "gap-2")}
+          >
             <span aria-hidden>◉</span>
             Open Live Control
           </Link>
-          <ActionButton variant="secondary" icon="⛶">
+          <Link
+            href={`/attendees?experienceId=${event.id}`}
+            className={buttonClasses("secondary", "gap-2")}
+          >
+            <span aria-hidden>⛶</span>
             Check in guests
-          </ActionButton>
+          </Link>
         </div>
       </div>
     </Card>

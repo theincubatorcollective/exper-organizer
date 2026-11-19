@@ -1,5 +1,6 @@
 "use client";
 
+import { formatEventLabelShort } from "@/lib/event-setup/datetime";
 import { formatNaira } from "@/lib/event-setup/mock";
 import { useEventSetup } from "./EventSetupProvider";
 
@@ -10,6 +11,7 @@ export function AttendeePreview({
 }) {
   const { draft } = useEventSetup();
   const ticket = draft.tickets[0];
+  const when = formatEventLabelShort(draft.startLabel).replace(", ", " · ");
 
   return (
     <aside className="w-full max-w-sm justify-self-center lg:justify-self-end">
@@ -29,10 +31,10 @@ export function AttendeePreview({
         <div className="flex flex-col gap-3 p-5">
           <h3 className="text-2xl font-semibold tracking-tight">{draft.title}</h3>
           <p className="text-[11px] text-muted">
-            25 Oct 2026 · 20:00 WAT · {draft.city}
+            {when} WAT · {draft.city}
           </p>
           <p className="text-[11px] leading-relaxed text-muted">
-            {`${draft.venueName}, Victoria Island · ${draft.city}, ${draft.country}`}
+            {`${draft.venueName} · ${draft.city}, ${draft.country}`}
           </p>
           {ticket ? (
             <div>

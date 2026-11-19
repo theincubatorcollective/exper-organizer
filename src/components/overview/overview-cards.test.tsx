@@ -80,15 +80,15 @@ describe("LiveEventCard", () => {
     expect(screen.getByText("active in the last 5 minutes")).toBeInTheDocument();
   });
 
-  test("Open Live Control goes to Live Control; Check in guests stays disabled", () => {
+  test("Open Live Control and Check in guests link to their pages", () => {
     render(<LiveEventCard hero={liveHero} activeNow={876} />);
     expect(screen.getByRole("link", { name: "Open Live Control" })).toHaveAttribute(
       "href",
-      "/live-control",
+      `/live-control?experienceId=${liveHero.event.id}`,
     );
-    expect(screen.getByRole("button", { name: "Check in guests" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
+    expect(screen.getByRole("link", { name: "Check in guests" })).toHaveAttribute(
+      "href",
+      `/attendees?experienceId=${liveHero.event.id}`,
     );
   });
 

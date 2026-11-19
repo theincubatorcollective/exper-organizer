@@ -22,6 +22,17 @@ describe("proxy", () => {
   });
 
   test("guards the overview and events areas", () => {
-    expect(config.matcher).toEqual(["/overview/:path*", "/events/:path*"]);
+    expect(config.matcher).toEqual([
+      "/overview/:path*",
+      "/events/:path*",
+      "/experience-builder/:path*",
+      "/live-control/:path*",
+      "/attendees/:path*",
+      "/sales/:path*",
+      "/moments/:path*",
+      "/payouts/:path*",
+      "/team/:path*",
+      "/settings/:path*",
+    ]);
   });
 });

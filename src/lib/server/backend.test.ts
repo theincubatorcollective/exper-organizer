@@ -115,4 +115,21 @@ describe("backendFetch", () => {
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  test("supports DELETE without a body", async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    const result = await backendFetch("/organizer/experiences/e/ticket-types/t", {
+      method: "DELETE",
+      bearer: "tok",
+    });
+    expect(result).toMatchObject({ ok: true, status: 204 });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      "http://backend.test/api/v1/organizer/experiences/e/ticket-types/t",
+    );
+    expect(init.method).toBe("DELETE");
+    expect(init.body).toBeUndefined();
+    expect(init.headers["content-type"]).toBeUndefined();
+  });
 });
+

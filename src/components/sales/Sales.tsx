@@ -3,16 +3,24 @@
 import { useState } from "react";
 import { buttonClasses } from "@/components/auth/Button";
 import { Card } from "@/components/overview/Card";
-import { designSales } from "@/lib/sales/mock";
+import type { SalesData } from "@/lib/sales/types";
 
-export function Sales() {
-  const data = designSales();
+export function Sales({
+  data,
+  experienceId: _experienceId,
+}: {
+  data: SalesData;
+  experienceId?: string;
+}) {
   const [currency, setCurrency] = useState(data.activeCurrency);
 
-  const capacityPercent = Math.min(
-    (data.capacity.registered / data.capacity.capacity) * 100,
-    100,
-  );
+  const capacityPercent =
+    data.capacity.capacity > 0
+      ? Math.min(
+          (data.capacity.registered / data.capacity.capacity) * 100,
+          100,
+        )
+      : 0;
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -120,17 +128,21 @@ export function Sales() {
             title="Recent orders"
             aside={`/ ${data.recentOrders.paidCount}`}
           >
-            <ul className="mt-5 flex flex-col">
-              {data.recentOrders.orders.map((order) => (
-                <li
-                  key={order.id}
-                  className="border-b border-border/50 py-4 last:border-b-0"
-                >
-                  <p className="text-sm">{order.primary}</p>
-                  <p className="mt-1 text-[11px] text-muted">{order.detail}</p>
-                </li>
-              ))}
-            </ul>
+            {data.recentOrders.orders.length === 0 ? (
+              <p className="mt-5 text-sm text-muted">No orders yet.</p>
+            ) : (
+              <ul className="mt-5 flex flex-col">
+                {data.recentOrders.orders.map((order) => (
+                  <li
+                    key={order.id}
+                    className="border-b border-border/50 py-4 last:border-b-0"
+                  >
+                    <p className="text-sm">{order.primary}</p>
+                    <p className="mt-1 text-[11px] text-muted">{order.detail}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </div>
 
@@ -165,14 +177,18 @@ export function Sales() {
           </Card>
 
           <Card title="Other event ledgers">
-            <ul className="mt-5 flex flex-col gap-4">
-              {data.ledgers.map((ledger) => (
-                <li key={ledger.id}>
-                  <p className="text-sm">{ledger.primary}</p>
-                  <p className="mt-1 text-[11px] text-muted">{ledger.event}</p>
-                </li>
-              ))}
-            </ul>
+            {data.ledgers.length === 0 ? (
+              <p className="mt-5 text-sm text-muted">No other events yet.</p>
+            ) : (
+              <ul className="mt-5 flex flex-col gap-4">
+                {data.ledgers.map((ledger) => (
+                  <li key={ledger.id}>
+                    <p className="text-sm">{ledger.primary}</p>
+                    <p className="mt-1 text-[11px] text-muted">{ledger.event}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </div>
       </div>

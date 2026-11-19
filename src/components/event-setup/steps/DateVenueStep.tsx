@@ -1,6 +1,11 @@
 "use client";
 
 import { Card } from "@/components/overview/Card";
+import {
+  endNoteFromLabels,
+  formatEventLabel,
+  parseEventLabel,
+} from "@/lib/event-setup/datetime";
 import { useEventSetup } from "../EventSetupProvider";
 import { SetupField, SetupInput, SetupSelect } from "../SetupField";
 import { SetupShell } from "../SetupShell";
@@ -15,11 +20,44 @@ const TIMEZONES = [
 
 const COUNTRIES = ["Nigeria", "Ghana", "Kenya", "United Kingdom", "United States"];
 
+const pickerClass = "[color-scheme:dark]";
+
 export function DateVenueStep() {
   const { draft, setDraft } = useEventSetup();
+  const start = parseEventLabel(draft.startLabel) ?? {
+    date: "",
+    time: "20:00",
+  };
+  const end = parseEventLabel(draft.endLabel) ?? {
+    date: "",
+    time: "03:30",
+  };
+  const endNote = endNoteFromLabels(draft.startLabel, draft.endLabel);
+
+  function updateStart(next: { date?: string; time?: string }) {
+    const date = next.date ?? start.date;
+    const time = next.time ?? start.time;
+    if (!date) return;
+    const startLabel = formatEventLabel(date, time);
+    setDraft({
+      startLabel,
+      endNote: endNoteFromLabels(startLabel, draft.endLabel),
+    });
+  }
+
+  function updateEnd(next: { date?: string; time?: string }) {
+    const date = next.date ?? end.date;
+    const time = next.time ?? end.time;
+    if (!date) return;
+    const endLabel = formatEventLabel(date, time);
+    setDraft({
+      endLabel,
+      endNote: endNoteFromLabels(draft.startLabel, endLabel),
+    });
+  }
 
   return (
-    <SetupShell stepId="date-venue">
+    <SetupShell stepId="date-venue" showSaveDraft>
       <Card>
         <h2 className="text-base font-medium">2. Date / Venue</h2>
 
@@ -59,19 +97,44 @@ export function DateVenueStep() {
             </SetupField>
           </div>
 
-          <SetupField label="Start">
-            <SetupInput
-              value={draft.startLabel}
-              onChange={(e) => setDraft({ startLabel: e.target.value })}
-            />
-          </SetupField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SetupField label="Start date">
+              <SetupInput
+                type="date"
+                value={start.date}
+                onChange={(e) => updateStart({ date: e.target.value })}
+                className={pickerClass}
+              />
+            </SetupField>
+            <SetupField label="Start time">
+              <SetupInput
+                type="time"
+                value={start.time}
+                onChange={(e) => updateStart({ time: e.target.value })}
+                className={pickerClass}
+              />
+            </SetupField>
+          </div>
 
-          <SetupField label="End" hint={draft.endNote}>
-            <SetupInput
-              value={draft.endLabel}
-              onChange={(e) => setDraft({ endLabel: e.target.value })}
-            />
-          </SetupField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SetupField label="End date">
+              <SetupInput
+                type="date"
+                value={end.date}
+                onChange={(e) => updateEnd({ date: e.target.value })}
+                className={pickerClass}
+                min={start.date || undefined}
+              />
+            </SetupField>
+            <SetupField label="End time" hint={endNote}>
+              <SetupInput
+                type="time"
+                value={end.time}
+                onChange={(e) => updateEnd({ time: e.target.value })}
+                className={pickerClass}
+              />
+            </SetupField>
+          </div>
 
           <SetupField
             label="IANA timezone"
