@@ -4,10 +4,35 @@ import {
   buildPayoutsData,
   mapBalance,
   mapTransfer,
+  normalizeResolveBankResponse,
   resolveDateRange,
 } from "./payouts";
 
 describe("payouts mappers", () => {
+  test("normalizeResolveBankResponse reads flat and nested payloads", () => {
+    expect(
+      normalizeResolveBankResponse({
+        bankName: "Access Bank",
+        accountName: "Ada Lovelace",
+        last4: "6789",
+      }),
+    ).toEqual({
+      bankName: "Access Bank",
+      accountName: "Ada Lovelace",
+      last4: "6789",
+    });
+
+    expect(
+      normalizeResolveBankResponse({
+        data: { account_name: " Nested Name ", bank_name: "UBA" },
+      }),
+    ).toEqual({
+      bankName: "UBA",
+      accountName: "Nested Name",
+      last4: null,
+    });
+  });
+
   test("mapBalance formats available and attention state", () => {
     expect(
       mapBalance({

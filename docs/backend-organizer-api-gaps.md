@@ -12,7 +12,7 @@
 |--------|------|
 | Experience Builder | Run-of-show GET/PUT wired (Add + Save); import / named versions still open |
 | Moments (`/moments`) | Gallery list + approve/reject wired; rejection-reason field still UI-only |
-| Payouts | Summary/balances/history + filters + bank resolve/add/default + transfer create wired. **Export statement still 404**. Workspace may return `payoutsEnabled: false` (transfers 409). **Bank name enquiry often fails** (`We could not find that account`) — provider/Paystack side, not UI |
+| Payouts | Summary/balances/history + filters + bank resolve/add/default + transfer create wired. **Export statement still 404**. Workspace may return `payoutsEnabled: false` (transfers 409). **`POST .../bank-accounts/resolve` is wired correctly** (`{ bankCode, accountNumber }` → `accountName`) but live API currently returns 400 `We could not find that account` for all probed NUBANs (incl. previously working Access `044`/`0123456789`) — **Paystack/provider name-enquiry config on backend** |
 | Team / Roles | Members list + invite + resend + save permissions wired; audit log still mock. **Invite email delivery unconfirmed / likely not sending** (API creates pending + accept token flow exists; no inbox mail observed) |
 | Settings | Org/notifications/defaults + security (sign-in alerts + session revoke) wired |
 

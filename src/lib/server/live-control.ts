@@ -369,7 +369,9 @@ export function postLiveUpdate(
   });
 }
 
-function asList<T>(payload: T[] | { data: T[] } | undefined | null): T[] {
+function asList<T>(
+  payload: T[] | { data?: T[] | null } | undefined | null,
+): T[] {
   if (!payload) return [];
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload.data)) return payload.data;

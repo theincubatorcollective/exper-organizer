@@ -3,7 +3,10 @@ import {
   readJsonBody,
   requireBearer,
 } from "@/lib/server/organizer-api";
-import { resolveBankAccount } from "@/lib/server/payouts";
+import {
+  normalizeResolveBankResponse,
+  resolveBankAccount,
+} from "@/lib/server/payouts";
 
 export async function POST(request: Request) {
   const auth = await requireBearer();
@@ -37,5 +40,17 @@ export async function POST(request: Request) {
     { bankCode, accountNumber },
     request.headers.get("user-agent"),
   );
-  return fromBackend(result);
+  if (!result.ok) return fromBackend(result);
+
+  const normalized = normalizeResolveBankResponse(result.data);
+  if (!normalized.accountName) {
+    return Response.json(
+      {
+        message:
+          "Account lookup returned no name. Check the bank and account number, or try again.",
+      },
+      { status: 502 },
+    );
+  }
+  return Response.json(normalized, { status: result.status });
 }

@@ -190,6 +190,39 @@ export function resolveBankAccount(
   );
 }
 
+/** Flatten nested / alternate resolve payloads into the UI shape. */
+export function normalizeResolveBankResponse(
+  payload: unknown,
+): ResolveBankResponse {
+  const root =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : {};
+  const nested =
+    root.data && typeof root.data === "object"
+      ? (root.data as Record<string, unknown>)
+      : root;
+  const accountName =
+    (typeof nested.accountName === "string" && nested.accountName) ||
+    (typeof nested.account_name === "string" && nested.account_name) ||
+    (typeof nested.name === "string" && nested.name) ||
+    null;
+  const bankName =
+    (typeof nested.bankName === "string" && nested.bankName) ||
+    (typeof nested.bank_name === "string" && nested.bank_name) ||
+    null;
+  const last4Raw =
+    (typeof nested.last4 === "string" && nested.last4) ||
+    (typeof nested.accountNumberLast4 === "string" &&
+      nested.accountNumberLast4) ||
+    null;
+  return {
+    accountName: accountName?.trim() || null,
+    bankName: bankName?.trim() || null,
+    last4: last4Raw?.trim() || null,
+  };
+}
+
 export function createBankAccount(
   bearer: string,
   body: {

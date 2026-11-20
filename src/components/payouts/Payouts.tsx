@@ -44,7 +44,7 @@ export function Payouts({ data }: { data: PayoutsData }) {
     [data.bankOptions],
   );
 
-  const [bankAccountId, setBankAccountId] = useState(
+  const [bankAccountId, setBankAccountId] = useState<string | null>(
     data.transfer.bankAccountId ?? currencyBanks[0]?.id ?? null,
   );
   const [amountInput, setAmountInput] = useState(
@@ -106,9 +106,13 @@ export function Payouts({ data }: { data: PayoutsData }) {
     clearLookup();
   }
 
-  async function lookupAccount(code: string, account: string) {
+  async function lookupAccount(
+    code: string,
+    account: string,
+    options: { force?: boolean } = {},
+  ) {
     const key = `${code}:${account}`;
-    if (lookupKeyRef.current === key) return;
+    if (!options.force && lookupKeyRef.current === key) return;
     lookupKeyRef.current = key;
     setBusy("resolve");
     setBankError(null);
@@ -125,17 +129,33 @@ export function Payouts({ data }: { data: PayoutsData }) {
     if (lookupKeyRef.current !== key) return;
 
     if (!result.ok) {
+      // Allow an immediate retry of the same bank + account.
+      lookupKeyRef.current = null;
+      const bankLabel =
+        sortedBanks.find((bank) => bank.code === code)?.name ?? code;
       setBankError(
         result.message.includes("could not find") ||
           result.message.includes("not find that account")
-          ? `${result.message} Make sure the bank matches the account (OPay vs bank, etc.). This check comes from the payment provider.`
+          ? `${result.message} Tried ${bankLabel} (${code}). Confirm that bank owns this NUBAN — OPay/Moniepoint are separate. If this keeps failing for a known-good account, the payment provider name check on the API is down.`
           : result.message,
       );
       return;
     }
 
+    const name =
+      result.data.accountName?.trim() ||
+      (result.data as { account_name?: string }).account_name?.trim() ||
+      null;
+    if (!name) {
+      lookupKeyRef.current = null;
+      setBankError(
+        "Account lookup returned no name. Try again, or pick the bank again.",
+      );
+      return;
+    }
+
     setResolvedOk(true);
-    setAccountName(result.data.accountName?.trim() || "Account found");
+    setAccountName(name);
     setMessage(null);
   }
 
@@ -188,7 +208,7 @@ export function Payouts({ data }: { data: PayoutsData }) {
     }
     if (!resolvedOk || !accountName) {
       setBankError("Wait for the account name to appear, then add it.");
-      void lookupAccount(bankCode, account);
+      void lookupAccount(bankCode, account, { force: true });
       return;
     }
     setBusy("add-bank");
@@ -605,7 +625,8 @@ export function Payouts({ data }: { data: PayoutsData }) {
 
                 {selectedCatalogBank ? (
                   <p className="text-[11px] text-muted">
-                    Selected · {selectedCatalogBank.name}
+                    Selected · {selectedCatalogBank.name} · code{" "}
+                    {selectedCatalogBank.code}
                   </p>
                 ) : (
                   <p className="text-[11px] text-muted">
@@ -649,6 +670,26 @@ export function Payouts({ data }: { data: PayoutsData }) {
                   </p>
                 ) : null}
 
+                {bankError &&
+                bankCode &&
+                digitsOnly(accountNumber).length === 10 ? (
+                  <button
+                    type="button"
+                    disabled={busy === "resolve"}
+                    onClick={() =>
+                      void lookupAccount(bankCode, digitsOnly(accountNumber), {
+                        force: true,
+                      })
+                    }
+                    className={buttonClasses(
+                      "secondary",
+                      busy === "resolve" ? "cursor-not-allowed opacity-70" : "",
+                    )}
+                  >
+                    {busy === "resolve" ? "Looking up…" : "Retry name lookup"}
+                  </button>
+                ) : null}
+
                 <button
                   type="button"
                   disabled={
@@ -674,9 +715,7 @@ export function Payouts({ data }: { data: PayoutsData }) {
                     ? "Adding…"
                     : busy === "resolve"
                       ? "Looking up account…"
-                      : resolvedOk
-                        ? "Add account"
-                        : "Add account"}
+                      : "Add account"}
                 </button>
               </div>
             </Card>
