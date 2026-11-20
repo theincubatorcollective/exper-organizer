@@ -7,7 +7,7 @@ export function designEventDraft(): EventDraft {
     title: "Neon Solstice",
     description:
       "Where kinetic light, spatial sound, and human presence fuse into a living collective pulse.",
-    category: "Music & nightlife",
+    category: "Music",
     slug: "neon-solstice",
     coverImageUrl: "/overview/neon-solstice.jpg",
     coverMeta: "Existing cover · JPG · 2.4 MB",

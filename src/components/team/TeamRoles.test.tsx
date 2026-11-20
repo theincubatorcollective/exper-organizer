@@ -1,10 +1,15 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import { designTeam } from "@/lib/team/mock";
 import { TeamRoles } from "./TeamRoles";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 
 describe("TeamRoles", () => {
   test("shows the team header and actions", () => {
-    render(<TeamRoles />);
+    render(<TeamRoles data={designTeam()} />);
     expect(
       screen.getByRole("heading", { level: 1, name: "Team / Roles" }),
     ).toBeInTheDocument();
@@ -18,7 +23,7 @@ describe("TeamRoles", () => {
   });
 
   test("lists workspace team members", () => {
-    render(<TeamRoles />);
+    render(<TeamRoles data={designTeam()} />);
     expect(screen.getByRole("heading", { name: /Workspace team/ })).toBeInTheDocument();
     expect(screen.getByText("/ 6 members")).toBeInTheDocument();
     expect(screen.getByText(/Tope Adewale/)).toBeInTheDocument();
@@ -29,7 +34,7 @@ describe("TeamRoles", () => {
   });
 
   test("shows role permissions panel", () => {
-    render(<TeamRoles />);
+    render(<TeamRoles data={designTeam()} />);
     expect(
       screen.getByRole("heading", { name: "Role permissions" }),
     ).toBeInTheDocument();

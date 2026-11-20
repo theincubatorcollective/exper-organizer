@@ -4,9 +4,22 @@
 **Product:** EXPER organizers dashboard  
 **Auth:** Bearer access token (`Authorization: Bearer <accessToken>`), same as existing `/api/v1/organizer/*`  
 **Base:** `/api/v1`  
-**Out of scope for this request:** Reports / analytics (frontend deferred)
+**Out of scope for this request:** Reports / analytics (frontend deferred)  
+**Updated:** 2026-11-19
 
 This doc lists **everything the Figma-built organizer UI still needs**. Some routes already exist in Postman (`17 Organizer`); for those we need **confirmed response shapes** or **small extensions**. New routes are marked **NEW**.
+
+### Screens still on Figma mocks (blocked on APIs in this doc)
+
+| Screen | Route in app | Section |
+|--------|--------------|---------|
+| Event setup — **Change cover** | `/events/setup/basics` | §2.2 *(frontend wired)* |
+| Experience Builder | `/experience-builder` | §7 |
+| Moments gallery | `/moments` | §8 |
+| Payouts | `/payouts` | §9 |
+| Team / Roles | `/team` | §10 |
+
+Please treat §§2.2, 7–10 as the **primary delivery ask** in this send. Confirm what already exists (OpenAPI / example JSON) and what you will add with ETA.
 
 ---
 
@@ -32,14 +45,22 @@ Frontend already uses these. Do not break them.
 | Auth | POST | `/organizer/auth/register`, `/verify`, `/login`, `/google`, `/forgot-password`, … |
 | Auth | GET | `/organizer/me` |
 | Workspace | GET | `/organizer/workspace` |
+| Workspace | PATCH | `/organizer/workspace` (rename) |
 | Events | GET | `/organizer/experiences` |
 | Events | POST | `/organizer/experiences` |
 | Events | GET | `/organizer/experiences/:experienceId` |
+| Events | PATCH | `/organizer/experiences/:experienceId` |
+| Events | POST | `/organizer/experiences/:experienceId/publish`, `/unpublish` |
 | Tickets | POST | `/organizer/experiences/:experienceId/ticket-types` |
+| Tickets | PATCH | `/organizer/experiences/:experienceId/ticket-types/:ticketTypeId` |
 | Tickets | DELETE | `/organizer/experiences/:experienceId/ticket-types/:ticketTypeId` |
 | Door | POST | `/organizer/experiences/:experienceId/check-in` body `{ code }` |
 | Sales / Door | GET | `/organizer/experiences/:experienceId/guests?page&limit` |
+| Sales / Door | GET | `/organizer/experiences/:experienceId/guests/export` |
 | Sales | GET | `/organizer/experiences/:experienceId/orders?page&limit` |
+| Sales | GET | `/organizer/experiences/:experienceId/sales/summary` |
+| Sales | GET | `/organizer/experiences/:experienceId/sales/export` |
+| Sales | GET | `/organizer/sales/ledgers` |
 | Live | GET/POST | `/organizer/experiences/:experienceId/moments` |
 | Live | POST | `/organizer/experiences/:experienceId/moments/:momentId/close` |
 | Live | GET | `/organizer/experiences/:experienceId/moments/:momentId/submissions` |
@@ -64,7 +85,7 @@ Frontend already uses these. Do not break them.
   "title": "Neon Solstice",
   "summary": "Short blurb",
   "description": "Long description",
-  "category": "music",
+  "category": "music|art|food|nightlife|outdoors|wellness|tech|film|sports|culture|other",
   "city": "Lagos",
   "country": "Nigeria",
   "venueName": "Landmark Beach",
@@ -81,44 +102,69 @@ Frontend already uses these. Do not break them.
 
 **Response:** full experience object (same shape as `GET .../experiences/:id`).
 
+**Category enum (blocking):** today API accepts  
+`music | art | food | nightlife | outdoors | wellness | tech | film | sports | culture`  
+and **rejects** `other` with 400. Organizer Basics has an **Other** option for events that do not fit those buckets — please **add `other`** to create + PATCH validation (same list on both).
+
 **UI:** Event setup Basics + Date/Venue save.
 
 ---
 
-### 2.2 Cover image upload — **NEW**
+### 2.2 Cover image upload — **EXISTS (frontend wired)**
+
+Basics **Change cover** is wired to this route. Keep the contract stable.
 
 `POST /organizer/experiences/:experienceId/cover`
 
-- `multipart/form-data` field `file` (jpg/png/webp)
-- **Response:**
+- Content-Type: `multipart/form-data`
+- Field: `file` (required) — accept `image/jpeg`, `image/png`, `image/webp`
+- Optional: `crop` / aspect hint if you support server-side crop (UI is ~16:9 / 21:9 hero)
+- Max size: please document (frontend will enforce the same; suggest ≤ 5–8 MB)
+
+**Response (preferred):**
 
 ```json
 {
-  "coverImageUrl": "https://cdn.example.com/…"
+  "coverImageUrl": "https://cdn.example.com/…",
+  "coverImageMeta": {
+    "width": 2400,
+    "height": 1350,
+    "contentType": "image/jpeg",
+    "bytes": 482193
+  }
 }
 ```
 
-**UI:** Basics “Change cover”.
+**Also acceptable:** return the full experience object with `coverImageUrl` set (same as `GET .../experiences/:id`).
+
+**Alternate (if you prefer JSON):**
+
+`PATCH /organizer/experiences/:experienceId` with `{ "coverImageUrl": "https://…" }` after a generic upload endpoint — only if upload lives elsewhere. Prefer the dedicated `POST .../cover` so the organizer app does not need a separate media service.
+
+**Create-flow note:** Cover upload requires an `experienceId`. Frontend already creates a draft via `POST /organizer/experiences` before Basics save. Please allow cover upload on **`draft`**, **`pending_review`**, and **`published`**.
+
+**Optional:**
+
+`DELETE /organizer/experiences/:experienceId/cover` → clear cover / revert to default.
+
+**UI:** Event setup Basics — “Change cover” button + attendee preview / Events / Overview heroes that read `coverImageUrl`.
 
 ---
 
-### 2.3 Publish / unpublish — **BROKEN on current backend (2026-11-17)**
+### 2.3 Publish / unpublish — **moderation-aware (updated 2026-11-19)**
 
 `POST /organizer/experiences/:experienceId/publish`  
 `POST /organizer/experiences/:experienceId/unpublish`
 
 - Body: `{}`
-- **Required response:** full experience with `status: "published"` (publish) or `status: "draft"` (unpublish)
+- **Accepted publish outcomes:**
+  - `status: "published"` → listed (Upcoming / Live / Past by dates)
+  - `status: "pending_review"` → moderation queue (stays under Drafts with “Pending review”; not listed yet)
+- **Unpublish:** `status: "draft"`
 
-**Confirmed frontend repro:**
-1. Organizer creates a draft via `POST /organizer/experiences` (or saves setup).
-2. UI calls `POST /organizer/experiences/:id/publish` with `{}` (200 OK).
-3. Immediate `GET /organizer/experiences/:id` still returns `status: "draft"` (or equivalent unpublished).
-4. Fallback `PATCH` with `{ "status": "published" }` also does not flip status (rejected or ignored).
+Frontend treats both `published` and `pending_review` as a successful Publish click. Only a stuck plain `draft` after publish is an error.
 
-**Please fix so publish is durable:** after a successful publish POST, both `GET /organizer/experiences` and `GET /organizer/experiences/:id` must return `status: "published"` (case-insensitive is fine). Until this works, Events → Upcoming stays empty and Drafts keep a Publish error.
-
-**UI:** Review “Publish event” + Drafts row “Publish”.
+**UI:** Review “Publish event” + Drafts row “Publish” (hidden while pending review).
 
 ---
 
@@ -350,6 +396,8 @@ Needed fields per order:
 
 ## 6. Live games / Live Control (extend + new)
 
+**Frontend status:** Response stream, poll results, presence, and leaderboard are consumed on Live Control. Pause/end, incidents, and update history are still open.
+
 ### 6.1 List moments — **confirm shape**
 
 `GET /organizer/experiences/:experienceId/moments`
@@ -502,34 +550,48 @@ Please return on each submission:
 
 ## 7. Experience Builder — **NEW module**
 
-Needed to persist the run-of-show (not only fire-and-forget `POST moments`).
+**UI status:** `/experience-builder` consumes run-of-show GET/PUT (Add + Save). Import / named versions still 404. Live Control still starts moments via `POST .../moments`.
+
+Needed to schedule / edit prompts before the night (not only start/close live moments).
 
 ### 7.1 List / replace run of show
 
 `GET /organizer/experiences/:experienceId/run-of-show`  
-`PUT /organizer/experiences/:experienceId/run-of-show`
+`PUT /organizer/experiences/:experienceId/run-of-show`  
+(or `PATCH` with partial prompt updates — document which)
 
 ```json
 {
+  "timezone": "Africa/Lagos",
+  "savedAt": "2026-10-25T20:35:00Z",
   "prompts": [
     {
       "id": "optional-client-id",
       "type": "room_vote|wrong_answers|photo_prompt|squad_mission|squad_vote",
       "title": "One has to go",
-      "supportingText": "…",
+      "supportingText": "Pick the act that has to leave the stage.",
       "scheduledAt": "2026-10-25T20:30:00Z",
       "durationSeconds": 120,
-      "audience": "everyone|checked_in|squad",
-      "rewardPoints": 50,
-      "content": {},
+      "audience": "everyone|checked_in|squad|squad_captains",
+      "format": "multiple_choice|wrong_answers|photo|squad_text",
+      "responseLimit": "one_per_person",
       "moderation": "none|required",
-      "responseLimit": "one_per_person"
+      "scoring": {
+        "participationPoints": 5,
+        "bonusPoints": 10
+      },
+      "ctaLabel": "Send my pick",
+      "answerPlaceholder": "Choose one · Be honest.",
+      "content": {},
+      "status": "draft|ready|sent|closed"
     }
   ]
 }
 ```
 
-### 7.2 Save version (optional)
+**UI fields to round-trip:** title, supporting text, scheduled time, duration, audience, format, response limit, moderation on/off, scoring copy, CTA / placeholder, status (Ready / Sent).
+
+### 7.2 Save version (optional but in Figma)
 
 `POST /organizer/experiences/:experienceId/run-of-show/versions`
 
@@ -537,7 +599,9 @@ Needed to persist the run-of-show (not only fire-and-forget `POST moments`).
 { "label": "Doors open v3" }
 ```
 
-### 7.3 Import / duplicate (optional)
+`GET /organizer/experiences/:experienceId/run-of-show/versions` — list labels + timestamps for restore.
+
+### 7.3 Import / duplicate (optional but in Figma)
 
 `POST /organizer/experiences/:experienceId/run-of-show/import`
 
@@ -545,11 +609,13 @@ Needed to persist the run-of-show (not only fire-and-forget `POST moments`).
 { "fromExperienceId": "…" }
 ```
 
-**UI:** `/experience-builder` — edit prompts, times, Save version, Import.
+**UI:** `/experience-builder` — prompt list, edit selected prompt, **Save version**, **Import**, reorder if you support it.
 
 ---
 
 ## 8. Moments gallery (`/moments`) — **NEW or extend submissions**
+
+**UI status:** `/moments` consumes gallery list + `responses/:id/review` for approve/reject. Rejection-reason note is still UI-only.
 
 Photo memory moderation across the event (not only one live mission).
 
@@ -557,7 +623,7 @@ Photo memory moderation across the event (not only one live mission).
 
 `GET /organizer/experiences/:experienceId/moments-gallery`
 
-**Query:** `status=pending|approved|rejected`, `page`, `limit`
+**Query:** `status=pending|approved|rejected`, `page`, `limit`, optional `experienceId` already in path
 
 ```json
 {
@@ -586,6 +652,8 @@ Photo memory moderation across the event (not only one live mission).
 }
 ```
 
+**UI:** Pending / Approved / Rejected counts; current submission (image, caption, submitter, ticket meta, consent, screening); side queue of other pending items.
+
 ### 8.2 Moderate
 
 Reuse `POST .../responses/:responseId/review` `{ "approved": true|false }`  
@@ -593,13 +661,21 @@ Reuse `POST .../responses/:responseId/review` `{ "approved": true|false }`
 
 `POST /organizer/experiences/:experienceId/moments-gallery/:id/review`
 
+```json
+{ "approved": true }
+```
+
+**UI:** Approve / Reject on the gallery detail card. Approval → shared event memory; rejection stays private to moderators + submitter.
+
 ---
 
 ## 9. Payouts — **NEW module**
 
+**UI status:** `/payouts` consumes summary (with `from`/`to`/`experienceId`), balances, banks catalog, bank-accounts (resolve/add/default), transfers list + create. Currency / event / date filters use query params. **Export statement still missing** (`GET .../payouts/export` 404).
+
 ### 9.1 Summary
 
-`GET /organizer/payouts/summary?currency=NGN&from=&to=`
+`GET /organizer/payouts/summary?currency=NGN&from=&to=&experienceId=`
 
 ```json
 {
@@ -611,6 +687,8 @@ Reuse `POST .../responses/:responseId/review` `{ "approved": true|false }`
   "transferredCount": 3
 }
 ```
+
+**UI cards:** Available · Pending settlement · Transferred in period.
 
 ### 9.2 Balances by currency
 
@@ -624,6 +702,7 @@ Reuse `POST .../responses/:responseId/review` `{ "approved": true|false }`
       "country": "Nigeria",
       "available": 8275000,
       "pending": 25553750,
+      "bankLabel": "GTBank · Verified",
       "needsAttention": false
     }
   ]
@@ -632,7 +711,9 @@ Reuse `POST .../responses/:responseId/review` `{ "approved": true|false }`
 
 ### 9.3 Bank accounts
 
-`GET /organizer/payouts/bank-accounts`
+`GET /organizer/payouts/bank-accounts`  
+`POST /organizer/payouts/bank-accounts` (add / verify — if in scope)  
+`PATCH /organizer/payouts/bank-accounts/:id` (set default)
 
 ```json
 {
@@ -641,7 +722,8 @@ Reuse `POST .../responses/:responseId/review` `{ "approved": true|false }`
       "id": "…",
       "label": "Afterhours Studio Ltd · GTBank · •••• 4829",
       "currency": "NGN",
-      "isDefault": true
+      "isDefault": true,
+      "status": "verified|needs_attention"
     }
   ]
 }
@@ -659,6 +741,8 @@ Reuse `POST .../responses/:responseId/review` `{ "approved": true|false }`
   "experienceId": null
 }
 ```
+
+**UI:** Transfer panel — from balance, bank account, amount, confirmation before funds leave. No FX.
 
 ### 9.5 Transfer history
 
@@ -683,9 +767,19 @@ Reuse `POST .../responses/:responseId/review` `{ "approved": true|false }`
 }
 ```
 
+**Please clarify:** amount units (major vs minor) for all payout money fields — same ask as tickets/orders.
+
+### 9.6 Export statement — **NEW / missing**
+
+`GET /organizer/payouts/export?currency=NGN&from=&to=&experienceId=`
+
+Same pattern as sales export (CSV or `{ "url": "…" }`). Currently 404.
+
 ---
 
 ## 10. Team / Roles — **NEW module**
+
+**UI status:** `/team` consumes members list, roles catalog, invite, resend, and active-member PATCH. Pending invites cannot be PATCH’d (API 404); cancel is `DELETE .../invites/:id` (not in Figma). Audit log still disabled.
 
 ### 10.1 List members
 
@@ -699,14 +793,19 @@ Reuse `POST .../responses/:responseId/review` `{ "approved": true|false }`
       "fullName": "Kemi Adeyemi",
       "email": "kemi@afterhours.studio",
       "roles": ["Moderator"],
-      "eventAccess": "selected",
+      "eventAccess": "all|selected",
       "experienceIds": ["…"],
+      "experienceLabels": ["Neon Solstice"],
       "status": "active|pending",
-      "isYou": false
+      "isYou": false,
+      "isOwner": false
     }
-  ]
+  ],
+  "total": 6
 }
 ```
+
+**UI rows:** name, role badges (Owner / Moderator / Check-in / Finance / Live operator / Editor / Invite pending), email · event access, Resend for pending.
 
 ### 10.2 Invite
 
@@ -739,10 +838,13 @@ Reuse `POST .../responses/:responseId/review` `{ "approved": true|false }`
     "pauseEndLive": true,
     "viewPrivateSquadScores": true,
     "managePayouts": false,
+    "manageTeam": false,
     "editEvents": false
   }
 }
 ```
+
+**UI permission toggles (Figma):** Run prompts & reminders · Pause / end live event · View private squad scores · Manage sales & payouts · Manage team permissions.
 
 ### 10.5 Remove member
 
@@ -752,7 +854,7 @@ Reuse `POST .../responses/:responseId/review` `{ "approved": true|false }`
 
 `GET /organizer/workspace/roles`
 
-Returns default permission matrix for each role key.
+Returns default permission matrix for each role key (Owner / Editor / Moderator / Check-in / Finance / Live operator).
 
 ---
 
@@ -836,17 +938,18 @@ Returns default permission matrix for each role key.
 
 | Priority | Deliver |
 |----------|---------|
-| P0 | Experience PATCH + publish/unpublish + ticket PATCH (+ guestsPerTicket) |
-| P0 | Guests: `code`, search/filter; check-in response shape |
-| P0 | Sales summary + order row contract |
-| P1 | Moment responses stream + poll results + presence |
-| P1 | Experience Builder run-of-show GET/PUT |
-| P1 | Moments gallery list + review |
-| P2 | Payouts module |
-| P2 | Team / Roles module |
-| P2 | Settings (profile, security, notifications, defaults) |
-| P2 | Exports (guests CSV, sales statement) |
-| P3 | Live pause/end, incidents, leaderboard, updates history, cover upload |
+| ~~P0~~ | ~~Cover image upload~~ — **wired** on Basics (`POST .../cover`) |
+| P0 | Guests: confirm `code` on rows; server-side `q` / `status` on list |
+| P0 | Confirm sales summary / ledger / payout amount units (major vs minor) |
+| **P1** | **Experience Builder** run-of-show GET/PUT (+ versions / import) |
+| **P1** | **Moments gallery** list + review (Approve / Reject) |
+| **P1** | **Payouts** summary, balances, bank accounts, transfers |
+| **P1** | **Team / Roles** members, invite, resend, update, remove |
+| P2 | Live: response stream, poll results, presence, pause/end, leaderboard, incidents |
+| P2 | Settings: org profile, security, notifications, event defaults (beyond workspace rename) |
+| P3 | Cover DELETE / replace edge cases; run-of-show version restore UX |
+
+Frontend already wired (keep stable): experience PATCH + publish/unpublish, ticket PATCH, sales summary/ledgers/export, guests export.
 
 ---
 
@@ -861,6 +964,7 @@ Returns default permission matrix for each role key.
 
 Please reply with:
 
-1. Which items already exist (with OpenAPI or example JSON)  
+1. Which items already exist (with OpenAPI or example JSON) — especially **cover upload**, **Experience Builder**, **Moments gallery**, **Payouts**, **Team / Roles**  
 2. Which you will add, with ETA  
-3. Any amount unit clarification (major vs minor) for tickets/orders/payouts
+3. Amount unit clarification (major vs minor) for tickets / orders / sales summary / payouts  
+4. Whether Moments gallery reuses `.../responses/:id/review` or needs a dedicated gallery review route

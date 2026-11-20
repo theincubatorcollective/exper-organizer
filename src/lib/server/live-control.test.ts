@@ -1,14 +1,26 @@
 import { describe, expect, test } from "vitest";
 import {
   isLiveMoment,
+  mapLeaderboardRow,
+  mapLivePhase,
+  mapMomentResponse,
   mapPollOptions,
   mapQueueItem,
   mapReport,
+  mapResultsOptions,
   mapSquad,
   momentTitle,
 } from "./live-control";
 
 describe("live-control mappers", () => {
+  test("mapLivePhase normalizes state strings", () => {
+    expect(mapLivePhase("running")).toBe("running");
+    expect(mapLivePhase("LIVE")).toBe("running");
+    expect(mapLivePhase("paused")).toBe("paused");
+    expect(mapLivePhase("ended")).toBe("ended");
+    expect(mapLivePhase("weird")).toBe("unknown");
+  });
+
   test("detects live moments", () => {
     expect(isLiveMoment({ status: "live", id: "1" })).toBe(true);
     expect(isLiveMoment({ status: "closed", id: "2" })).toBe(false);
@@ -97,5 +109,60 @@ describe("live-control mappers", () => {
       laughs: 3,
       flagged: true,
     });
+  });
+
+  test("mapMomentResponse and mapResultsOptions", () => {
+    expect(
+      mapMomentResponse(
+        {
+          id: "a1",
+          text: "Updating Windows.",
+          author: "Kemi",
+          createdAt: "2026-10-25T20:41:08Z",
+          laughs: 24,
+          flagged: false,
+        },
+        "UTC",
+      ),
+    ).toMatchObject({
+      id: "a1",
+      text: "Updating Windows.",
+      author: "Kemi",
+      laughs: 24,
+      flagged: false,
+    });
+
+    expect(
+      mapResultsOptions({
+        respondents: 240,
+        options: [
+          { id: "opt_1", label: "We should hang soon", votes: 132, percent: 55 },
+          { id: "opt_2", label: "Maybe next week", votes: 108, percent: 45 },
+        ],
+      }),
+    ).toEqual([
+      {
+        label: "We should hang soon",
+        percent: 55,
+        votes: 132,
+        emphasize: true,
+      },
+      {
+        label: "Maybe next week",
+        percent: 45,
+        votes: 108,
+        emphasize: false,
+      },
+    ]);
+  });
+
+  test("mapLeaderboardRow", () => {
+    expect(
+      mapLeaderboardRow({
+        userId: "u1",
+        displayName: "Femisola",
+        points: 2480,
+      }),
+    ).toEqual({ name: "Femisola", points: 2480 });
   });
 });

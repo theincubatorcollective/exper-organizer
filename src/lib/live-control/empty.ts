@@ -28,6 +28,7 @@ export function emptyLiveControl(
         "Sending next closes this prompt first. Attendees keep their submitted answers.",
     },
     activeMomentId: null,
+    livePhase: "unknown",
     responses: [],
     queue: [],
     poll: {

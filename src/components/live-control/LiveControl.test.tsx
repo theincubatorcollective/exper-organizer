@@ -22,6 +22,10 @@ describe("LiveControl", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/Neon Solstice · Landmark Beach/)).toBeInTheDocument();
     expect(screen.getByText("Live · Connected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pause all" })).toBeEnabled();
+    expect(
+      screen.getAllByRole("button", { name: "End event…" }).length,
+    ).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("LIVE · TEXT PROMPT")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
@@ -39,7 +43,7 @@ describe("LiveControl", () => {
         "838 yet to answer · One answer per person · Creative prompt, no correct answer",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Pause$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Pause$/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /End prompt/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Send next/ })).toBeEnabled();
     expect(
@@ -88,5 +92,8 @@ describe("LiveControl", () => {
     expect(
       screen.getByRole("heading", { name: "Event safety controls" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Pause all activity" }),
+    ).toBeEnabled();
   });
 });

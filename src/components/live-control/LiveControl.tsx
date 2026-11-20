@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { buttonClasses } from "@/components/auth/Button";
 import { Card } from "@/components/overview/Card";
-import { closeLiveMoment } from "@/lib/live-control/api";
+import {
+  closeLiveMoment,
+  endLivePhase,
+  pauseLivePhase,
+  resumeLivePhase,
+} from "@/lib/live-control/api";
 import type { LiveControlData } from "@/lib/live-control/types";
 import { sparklinePath } from "@/lib/overview/sparkline";
 
@@ -21,6 +26,7 @@ export function LiveControl({
   const router = useRouter();
   const [streamTab, setStreamTab] = useState<StreamTab>("newest");
   const [busy, setBusy] = useState(false);
+  const [phaseBusy, setPhaseBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const flaggedCount = data.responses.filter((item) => item.flagged).length;
   const responses =
@@ -29,6 +35,13 @@ export function LiveControl({
       : streamTab === "laughed"
         ? [...data.responses].sort((a, b) => b.laughs - a.laughs)
         : data.responses;
+  const phase = data.livePhase;
+  const phaseLabel =
+    phase === "paused"
+      ? "Paused"
+      : phase === "ended"
+        ? "Ended"
+        : "Live · Connected";
 
   async function endActivePrompt() {
     if (!data.activeMomentId) return;
@@ -46,6 +59,43 @@ export function LiveControl({
     }
   }
 
+  async function onPauseOrResume() {
+    setPhaseBusy(phase === "paused" ? "resume" : "pause");
+    setError(null);
+    try {
+      const result =
+        phase === "paused"
+          ? await resumeLivePhase(experienceId)
+          : await pauseLivePhase(experienceId);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      router.refresh();
+    } finally {
+      setPhaseBusy(null);
+    }
+  }
+
+  async function onEndEvent() {
+    const confirmed = window.confirm(
+      "End the live phase for everyone? This cannot be undone.",
+    );
+    if (!confirmed) return;
+    setPhaseBusy("end");
+    setError(null);
+    try {
+      const result = await endLivePhase(experienceId, true);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      router.refresh();
+    } finally {
+      setPhaseBusy(null);
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <header className="flex flex-col gap-5">
@@ -59,26 +109,60 @@ export function LiveControl({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <p className="flex items-center gap-1.5 text-[11px] font-medium text-accent">
-            <span aria-hidden className="size-1.5 rounded-full bg-accent" />
-            Live · Connected
+          <p
+            className={`flex items-center gap-1.5 text-[11px] font-medium ${
+              phase === "ended"
+                ? "text-muted"
+                : phase === "paused"
+                  ? "text-[#d6b35c]"
+                  : "text-accent"
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`size-1.5 rounded-full ${
+                phase === "ended"
+                  ? "bg-muted"
+                  : phase === "paused"
+                    ? "bg-[#d6b35c]"
+                    : "bg-accent"
+              }`}
+            />
+            {phaseLabel}
           </p>
           <p className="text-[11px] text-muted">{data.syncLabel}</p>
           <button
             type="button"
-            aria-disabled="true"
-            className={buttonClasses("secondary", "cursor-not-allowed gap-2")}
+            disabled={phaseBusy !== null || phase === "ended"}
+            onClick={() => void onPauseOrResume()}
+            className={buttonClasses(
+              "secondary",
+              `gap-2 ${
+                phaseBusy !== null || phase === "ended"
+                  ? "cursor-not-allowed opacity-70"
+                  : ""
+              }`,
+            )}
           >
             <PauseIcon />
-            Pause all
+            {phaseBusy === "pause" || phaseBusy === "resume"
+              ? "Updating…"
+              : phase === "paused"
+                ? "Resume"
+                : "Pause all"}
           </button>
           <button
             type="button"
-            aria-disabled="true"
-            className="inline-flex cursor-not-allowed items-center gap-2 rounded-full bg-surface-2 px-5 py-2.5 text-xs font-semibold text-danger"
+            disabled={phaseBusy !== null || phase === "ended"}
+            onClick={() => void onEndEvent()}
+            className={`inline-flex items-center gap-2 rounded-full bg-surface-2 px-5 py-2.5 text-xs font-semibold text-danger ${
+              phaseBusy !== null || phase === "ended"
+                ? "cursor-not-allowed opacity-70"
+                : ""
+            }`}
           >
             <StopIcon />
-            End event…
+            {phaseBusy === "end" ? "Ending…" : "End event…"}
           </button>
         </div>
         {error ? (
@@ -137,7 +221,12 @@ export function LiveControl({
           <ArrivalsCard arrivals={data.arrivals} />
           <RemindersCard reminders={data.reminders} />
           <IncidentsCard incidents={data.incidents} />
-          <SafetyControlsCard />
+          <SafetyControlsCard
+            phase={phase}
+            busy={phaseBusy}
+            onPauseOrResume={() => void onPauseOrResume()}
+            onEndEvent={() => void onEndEvent()}
+          />
         </div>
       </div>
     </div>
@@ -704,7 +793,18 @@ function IncidentsCard({
   );
 }
 
-function SafetyControlsCard() {
+function SafetyControlsCard({
+  phase,
+  busy,
+  onPauseOrResume,
+  onEndEvent,
+}: {
+  phase: LiveControlData["livePhase"];
+  busy: string | null;
+  onPauseOrResume: () => void;
+  onEndEvent: () => void;
+}) {
+  const disabled = busy !== null || phase === "ended";
   return (
     <Card title="Event safety controls">
       <p className="mt-3 text-[11px] leading-relaxed text-muted">
@@ -714,16 +814,23 @@ function SafetyControlsCard() {
       <div className="mt-4 flex flex-col gap-2">
         <button
           type="button"
-          aria-disabled="true"
-          className={buttonClasses("secondary", "w-full cursor-not-allowed gap-2")}
+          disabled={disabled}
+          onClick={onPauseOrResume}
+          className={buttonClasses(
+            "secondary",
+            `w-full gap-2 ${disabled ? "cursor-not-allowed opacity-70" : ""}`,
+          )}
         >
           <PauseIcon />
-          Pause all activity
+          {phase === "paused" ? "Resume activity" : "Pause all activity"}
         </button>
         <button
           type="button"
-          aria-disabled="true"
-          className="inline-flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-full bg-surface-2 px-5 py-2.5 text-xs font-semibold text-danger"
+          disabled={disabled}
+          onClick={onEndEvent}
+          className={`inline-flex w-full items-center justify-center gap-2 rounded-full bg-surface-2 px-5 py-2.5 text-xs font-semibold text-danger ${
+            disabled ? "cursor-not-allowed opacity-70" : ""
+          }`}
         >
           <StopIcon />
           End event…

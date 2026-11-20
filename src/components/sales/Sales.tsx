@@ -7,12 +7,62 @@ import type { SalesData } from "@/lib/sales/types";
 
 export function Sales({
   data,
-  experienceId: _experienceId,
+  experienceId,
 }: {
   data: SalesData;
   experienceId?: string;
 }) {
   const [currency, setCurrency] = useState(data.activeCurrency);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  async function onExport() {
+    if (!experienceId) {
+      setExportError("No experience selected to export.");
+      return;
+    }
+    setExportError(null);
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (currency) params.set("currency", currency);
+      const response = await fetch(
+        `/api/organizer/experiences/${experienceId}/sales/export?${params}`,
+      );
+      if (!response.ok) {
+        let message = "Couldn't export the sales statement.";
+        try {
+          const body = (await response.json()) as { message?: string };
+          if (body.message) message = body.message;
+        } catch {
+          // keep default
+        }
+        setExportError(message);
+        return;
+      }
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const body = (await response.json()) as { url?: string; message?: string };
+        if (body.url) {
+          window.open(body.url, "_blank", "noopener,noreferrer");
+          return;
+        }
+        setExportError(body.message || "Export did not return a download.");
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `sales-${experienceId}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError("Couldn't export the sales statement.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const capacityPercent =
     data.capacity.capacity > 0
@@ -73,13 +123,22 @@ export function Sales({
           </button>
           <button
             type="button"
-            aria-disabled="true"
-            className={buttonClasses("secondary", "cursor-not-allowed gap-2")}
+            onClick={() => void onExport()}
+            disabled={exporting || !experienceId}
+            className={buttonClasses(
+              "secondary",
+              `gap-2 ${exporting || !experienceId ? "cursor-not-allowed opacity-70" : ""}`,
+            )}
           >
             <ExportIcon />
-            Export statement
+            {exporting ? "Exporting…" : "Export statement"}
           </button>
         </div>
+        {exportError ? (
+          <p role="alert" className="text-[11px] text-red-400">
+            {exportError}
+          </p>
+        ) : null}
       </header>
 
       <section

@@ -29,12 +29,28 @@ export type EventDefaultsSettings = {
   photoReviewRequired: boolean;
 };
 
+export type SecuritySession = {
+  id: string;
+  label: string;
+  current: boolean;
+  lastActiveLabel: string;
+};
+
+export type SecuritySettings = {
+  twoFactorEnabled: boolean;
+  signInAlerts: boolean;
+  hasPassword: boolean;
+  passwordChangedLabel: string | null;
+  sessions: SecuritySession[];
+};
+
 export type SettingsData = {
   eventMeta: string;
   organisation: OrganisationProfile;
   notifications: NotificationSettings;
   eventDefaults: EventDefaultsSettings;
   security: SettingsStatusRow[];
+  securitySettings: SecuritySettings;
   workspaceControls: {
     body: string;
   };
@@ -42,5 +58,6 @@ export type SettingsData = {
     organisation: string | null;
     notifications: string | null;
     eventDefaults: string | null;
+    security: string | null;
   };
 };

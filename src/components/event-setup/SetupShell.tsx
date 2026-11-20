@@ -86,7 +86,8 @@ export function SetupShell({
       }
 
       setDraft({
-        status: "Published",
+        status:
+          published.data.status === "pending_review" ? "Draft" : "Published",
         savedAtLabel: savedAtLabelNow(draft.timezone),
       });
       router.push(`/events?tab=${published.data.tab}`);

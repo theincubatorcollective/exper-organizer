@@ -6,22 +6,11 @@ import {
 import { designEventDraft } from "./mock";
 import type { EventDraft, TicketType } from "./types";
 
+import { fromApiCategory } from "./categories";
+
 export const SETUP_EXPERIENCE_STORAGE_KEY = "exper.organizer.setupExperienceId";
 
-const CATEGORY_LABELS: Record<string, string> = {
-  music: "Music & nightlife",
-  arts: "Arts & culture",
-  food: "Food & drink",
-  wellness: "Wellness",
-  sports: "Other",
-  other: "Other",
-};
-
-export function fromApiCategory(value: string | null | undefined): string {
-  if (!value) return designEventDraft().category;
-  const key = value.trim().toLowerCase();
-  return CATEGORY_LABELS[key] ?? value;
-}
+export { fromApiCategory } from "./categories";
 
 export function rememberSetupExperienceId(id: string | null) {
   if (typeof window === "undefined") return;
@@ -98,8 +87,11 @@ function ticketTypesFrom(obj: Record<string, unknown>): TicketType[] {
 }
 
 function statusFrom(value: unknown): EventDraft["status"] {
-  const raw = asString(value)?.toLowerCase() ?? "";
-  if (raw.includes("publish")) return "Published";
+  const raw = (asString(value) ?? "").toLowerCase().replace(/-/g, "_");
+  if (raw.includes("publish") && !raw.includes("unpublish")) return "Published";
+  if (raw.includes("pending_review") || raw.includes("in_review")) {
+    return "Draft";
+  }
   return "Draft";
 }
 

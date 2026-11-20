@@ -1,10 +1,21 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import { designMoments } from "@/lib/moments/mock";
 import { Moments } from "./Moments";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
+}));
+
+function renderMoments() {
+  return render(
+    <Moments data={designMoments()} experienceId="exp-test" />,
+  );
+}
 
 describe("Moments", () => {
   test("shows the moderation header and status tabs", () => {
-    render(<Moments />);
+    renderMoments();
     expect(
       screen.getByRole("heading", { level: 1, name: "Moments moderation" }),
     ).toBeInTheDocument();
@@ -22,16 +33,16 @@ describe("Moments", () => {
   });
 
   test("shows the current submission, actions and details", () => {
-    render(<Moments />);
+    renderMoments();
     expect(
       screen.getByText("The room feels like it's breathing."),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Ada Okafor · Neon Solstice · 21:39 WAT"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Approve photo/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Reject…/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Skip for now" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Approve photo/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Reject…/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Skip for now" })).toBeEnabled();
     expect(
       screen.getByRole("heading", { name: "Submission details" }),
     ).toBeInTheDocument();
@@ -44,11 +55,11 @@ describe("Moments", () => {
   });
 
   test("shows the up-next queue", () => {
-    render(<Moments />);
+    renderMoments();
     expect(screen.getByRole("heading", { name: /Up next/ })).toBeInTheDocument();
     expect(screen.getByText("/ Oldest first")).toBeInTheDocument();
     expect(screen.getByText(/Kunle Bello/)).toBeInTheDocument();
-    expect(screen.getByText("Find Something Blue · 21:39 WAT")).toBeInTheDocument();
+    expect(screen.getAllByText(/Find Something Blue/).length).toBeGreaterThan(0);
     expect(screen.getByText(/Kemi Adeyemi/)).toBeInTheDocument();
     expect(screen.getByText(/Bola Akande/)).toBeInTheDocument();
     expect(

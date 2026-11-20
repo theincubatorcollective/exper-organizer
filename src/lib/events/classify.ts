@@ -1,9 +1,27 @@
 import type { EventRow, EventTab } from "./types";
 
+function normStatus(status: string | null | undefined): string {
+  return (status ?? "").trim().toLowerCase().replace(/-/g, "_");
+}
+
+/** Submitted for moderation — not listed yet, but publish succeeded. */
+export function isPendingReviewStatus(
+  status: string | null | undefined,
+): boolean {
+  const value = normStatus(status);
+  return (
+    value === "pending_review" ||
+    value === "pendingreview" ||
+    value === "in_review" ||
+    value === "under_review" ||
+    value === "awaiting_review"
+  );
+}
+
 /** Backend may send `published`, `Published`, `live`, etc. */
 export function isPublishedStatus(status: string | null | undefined): boolean {
-  const value = (status ?? "").trim().toLowerCase();
-  if (!value) return false;
+  const value = normStatus(status);
+  if (!value || isPendingReviewStatus(value)) return false;
   if (
     value === "published" ||
     value === "live" ||
@@ -19,6 +37,13 @@ export function isPublishedStatus(status: string | null | undefined): boolean {
   }
   // e.g. "published_at", "is_published", "status_published"
   return value.includes("publish") && !value.includes("unpublish");
+}
+
+/** Publish endpoint accepted the request (live or waiting on review). */
+export function isPublishAcceptedStatus(
+  status: string | null | undefined,
+): boolean {
+  return isPublishedStatus(status) || isPendingReviewStatus(status);
 }
 
 /** Best-effort raw status string for error messages / debugging. */
@@ -52,12 +77,16 @@ export function rawStatusFromExperiencePayload(payload: unknown): string {
 
 export function normalizeEventStatus(
   status: string | null | undefined,
-): "published" | "draft" {
-  return isPublishedStatus(status) ? "published" : "draft";
+): "published" | "pending_review" | "draft" {
+  if (isPublishedStatus(status)) return "published";
+  if (isPendingReviewStatus(status)) return "pending_review";
+  return "draft";
 }
 
 /** Read publish state from whatever shape the API returns. */
-export function statusFromExperiencePayload(payload: unknown): "published" | "draft" {
+export function statusFromExperiencePayload(
+  payload: unknown,
+): "published" | "pending_review" | "draft" {
   if (!payload || typeof payload !== "object") return "draft";
   const root = payload as Record<string, unknown>;
   const obj =

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { TeamRoles } from "@/components/team/TeamRoles";
+import { TeamContent } from "./TeamContent";
 
 export const metadata: Metadata = { title: "Team / Roles · EXPER" };
 
 export default function TeamPage() {
-  return <TeamRoles />;
+  return <TeamContent />;
 }

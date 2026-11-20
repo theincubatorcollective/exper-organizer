@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { buttonClasses } from "@/components/auth/Button";
-import { isPublishedStatus } from "@/lib/events/classify";
+import {
+  isPendingReviewStatus,
+  isPublishedStatus,
+} from "@/lib/events/classify";
 import { eventCoverSrc } from "@/lib/events/cover";
 import { formatEventRange } from "@/lib/events/format";
 import type { EventRow } from "@/lib/events/types";
@@ -18,6 +21,7 @@ function tickets({ sold, capacity }: Pick<EventRow, "sold" | "capacity">): strin
 export function EventRowItem({ event }: { event: EventRow }) {
   const place = [event.venue.name, event.venue.city].filter(Boolean).join(" · ");
   const zone = `${event.timezone} · ${utcOffset(event.timezone, new Date(event.startsAt))}`;
+  const pendingReview = isPendingReviewStatus(event.status);
   const isDraft = !isPublishedStatus(event.status);
   const coverSrc = eventCoverSrc(event.coverImageUrl, event.id);
 
@@ -32,7 +36,11 @@ export function EventRowItem({ event }: { event: EventRow }) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="truncate text-xl font-medium tracking-tight">{event.title}</h3>
-          {isDraft ? (
+          {pendingReview ? (
+            <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+              Pending review
+            </span>
+          ) : isDraft ? (
             <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
               Draft
             </span>
@@ -59,7 +67,9 @@ export function EventRowItem({ event }: { event: EventRow }) {
           >
             Manage event
           </Link>
-          {isDraft ? <PublishEventButton experienceId={event.id} /> : null}
+          {isDraft && !pendingReview ? (
+            <PublishEventButton experienceId={event.id} />
+          ) : null}
         </div>
       </div>
     </article>

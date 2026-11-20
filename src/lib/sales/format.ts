@@ -9,7 +9,12 @@ const SYMBOLS: Record<string, string> = {
   EUR: "€",
 };
 
-/** Format a major-unit amount for the sales UI. */
+/**
+ * Format a money amount for the sales UI.
+ * Ticket prices / orders in this app use the same integer unit shown as ₦25,000.
+ * Sales summary + ledgers Postman notes say “kobo”; we still format with this helper
+ * so figures match Access ticket amounts unless product confirms a /100 conversion.
+ */
 export function formatMoney(
   amount: number,
   currency: string,

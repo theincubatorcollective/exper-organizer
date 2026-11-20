@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { buttonClasses } from "@/components/auth/Button";
 import { Card } from "@/components/overview/Card";
-import { checkInGuest, outcomeMessage } from "@/lib/attendees/api";
+import {
+  checkInGuest,
+  exportGuestList,
+  outcomeMessage,
+} from "@/lib/attendees/api";
 import type { AttendeesData, Guest } from "@/lib/attendees/types";
 
 type FilterTab = "all" | "pending" | "checked-in";
@@ -23,8 +27,31 @@ export function Attendees({
   const [lookupOpen, setLookupOpen] = useState(false);
   const [lookupCode, setLookupCode] = useState("");
   const [busyCode, setBusyCode] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  async function onExport() {
+    setError(null);
+    setMessage(null);
+    setExporting(true);
+    const status =
+      filter === "checked-in"
+        ? "checked_in"
+        : filter === "pending"
+          ? "pending"
+          : "all";
+    const result = await exportGuestList(experienceId, {
+      q: query,
+      status,
+    });
+    setExporting(false);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    setMessage("Guest list export started.");
+  }
 
   const guests = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -142,11 +169,15 @@ export function Attendees({
         </button>
         <button
           type="button"
-          aria-disabled="true"
-          className={buttonClasses("secondary", "cursor-not-allowed gap-2")}
+          onClick={() => void onExport()}
+          disabled={exporting}
+          className={buttonClasses(
+            "secondary",
+            `gap-2 ${exporting ? "cursor-not-allowed opacity-70" : ""}`,
+          )}
         >
           <ExportIcon />
-          Export guest list
+          {exporting ? "Exporting…" : "Export guest list"}
         </button>
       </div>
 

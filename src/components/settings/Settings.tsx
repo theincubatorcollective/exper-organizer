@@ -5,9 +5,11 @@ import { useState, type FormEvent } from "react";
 import { buttonClasses } from "@/components/auth/Button";
 import { Card } from "@/components/overview/Card";
 import {
+  revokeSession,
   saveEventDefaults,
   saveNotifications,
   saveOrganisation,
+  saveSecurity,
 } from "@/lib/settings/api";
 import type {
   SettingsData,
@@ -21,6 +23,9 @@ export function Settings({ data }: { data: SettingsData }) {
   const [organisation, setOrganisation] = useState(data.organisation);
   const [notifications, setNotifications] = useState(data.notifications);
   const [eventDefaults, setEventDefaults] = useState(data.eventDefaults);
+  const [signInAlerts, setSignInAlerts] = useState(
+    data.securitySettings.signInAlerts,
+  );
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +87,41 @@ export function Settings({ data }: { data: SettingsData }) {
       }
       setEventDefaults(result.data);
       setMessage("Event defaults saved.");
+      router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onSaveSecurity() {
+    setBusy("security");
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await saveSecurity({ signInAlerts });
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      setSignInAlerts(result.data.signInAlerts);
+      setMessage("Security settings saved.");
+      router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onRevokeSession(sessionId: string) {
+    setBusy(`revoke-${sessionId}`);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await revokeSession(sessionId);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      setMessage("Session signed out.");
       router.refresh();
     } finally {
       setBusy(null);
@@ -265,6 +305,11 @@ export function Settings({ data }: { data: SettingsData }) {
 
         <div className="flex min-w-0 flex-col gap-6">
           <Card title="Security">
+            {data.loadErrors?.security ? (
+              <p className="mt-3 text-[11px] text-red-400">
+                {data.loadErrors.security}
+              </p>
+            ) : null}
             <ul className="mt-5 flex flex-col gap-4">
               {data.security.map((row) => (
                 <li key={row.id}>
@@ -272,6 +317,75 @@ export function Settings({ data }: { data: SettingsData }) {
                 </li>
               ))}
             </ul>
+
+            <div className="mt-5">
+              <ToggleRow
+                label="Sign-in alerts"
+                detail="Email when a new device signs in."
+                on={signInAlerts}
+                onToggle={() => setSignInAlerts((value) => !value)}
+              />
+              <button
+                type="button"
+                disabled={busy === "security"}
+                onClick={() => void onSaveSecurity()}
+                className={buttonClasses(
+                  "primary",
+                  `mt-4 ${busy === "security" ? "opacity-50" : ""}`,
+                )}
+              >
+                {busy === "security" ? "Saving…" : "Save security"}
+              </button>
+            </div>
+
+            <div className="mt-6">
+              <p className="text-sm font-medium">Active sessions</p>
+              <p className="mt-1 text-[11px] text-muted">
+                {data.securitySettings.hasPassword
+                  ? "Password sign-in enabled."
+                  : "No password on this account."}
+                {data.securitySettings.passwordChangedLabel
+                  ? ` · ${data.securitySettings.passwordChangedLabel}`
+                  : ""}
+              </p>
+              {data.securitySettings.sessions.length === 0 ? (
+                <p className="mt-3 text-[11px] text-muted">No sessions listed.</p>
+              ) : (
+                <ul className="mt-4 flex flex-col gap-3">
+                  {data.securitySettings.sessions.map((session) => (
+                    <li
+                      key={session.id}
+                      className="rounded-[1.25rem] bg-surface-2 px-4 py-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm">{session.label}</p>
+                          <p className="mt-1 text-[11px] text-muted">
+                            Last active · {session.lastActiveLabel}
+                          </p>
+                        </div>
+                        {!session.current ? (
+                          <button
+                            type="button"
+                            disabled={busy === `revoke-${session.id}`}
+                            onClick={() => void onRevokeSession(session.id)}
+                            className="shrink-0 text-[11px] font-semibold text-danger disabled:opacity-70"
+                          >
+                            {busy === `revoke-${session.id}`
+                              ? "Signing out…"
+                              : "Sign out"}
+                          </button>
+                        ) : (
+                          <span className="shrink-0 text-[11px] text-accent">
+                            Current
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </Card>
 
           <Card title="Notification delivery">

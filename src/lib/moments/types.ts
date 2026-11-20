@@ -7,6 +7,21 @@ export type MomentQueueItem = {
   detail: string;
 };
 
+export type MomentSubmission = {
+  id: string;
+  responseId: string;
+  caption: string;
+  authorMeta: string;
+  imageUrl: string;
+  submitter: string;
+  ticketMeta: string;
+  consent: string;
+  consentNote: string;
+  screening: string;
+  actionNote: string;
+  momentTitle: string;
+};
+
 export type MomentsData = {
   eventMeta: string;
   counts: {
@@ -14,17 +29,7 @@ export type MomentsData = {
     approved: number;
     rejected: number;
   };
-  current: {
-    caption: string;
-    authorMeta: string;
-    imageUrl: string;
-    submitter: string;
-    ticketMeta: string;
-    consent: string;
-    consentNote: string;
-    screening: string;
-    actionNote: string;
-  };
-  queue: MomentQueueItem[];
+  /** Submissions for the active tab (oldest first). */
+  items: MomentSubmission[];
   queueFooter: string;
 };

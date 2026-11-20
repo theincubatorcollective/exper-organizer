@@ -75,6 +75,16 @@ describe("Event setup flow", () => {
     expect(screen.getByRole("button", { name: /Save ticket type/ })).toBeInTheDocument();
   });
 
+  test("Access edit form opens from Edit and pre-fills the ticket", async () => {
+    const user = userEvent.setup();
+    renderStep(<AccessStep />);
+    const editButtons = screen.getAllByRole("button", { name: "Edit" });
+    await user.click(editButtons[0]!);
+    expect(screen.getByDisplayValue("General Access")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("25000")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Save changes/ })).toBeInTheDocument();
+  });
+
   test("Experience lists run of show and builder entry", () => {
     renderStep(<ExperienceStep />);
     expect(screen.getByText("One has to go")).toBeInTheDocument();

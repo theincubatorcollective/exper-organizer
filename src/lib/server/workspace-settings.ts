@@ -2,7 +2,10 @@ import type {
   EventDefaultsSettings,
   NotificationSettings,
   OrganisationProfile,
+  SecuritySession,
+  SecuritySettings,
   SettingsData,
+  SettingsStatusRow,
 } from "@/lib/settings/types";
 import { backendFetch, type BackendResult } from "./backend";
 import { getWorkspace } from "./organizer";
@@ -104,6 +107,126 @@ export function updateEventDefaults(
   );
 }
 
+export type SecuritySessionApi = {
+  id?: string;
+  label?: string | null;
+  current?: boolean | null;
+  lastActiveAt?: string | null;
+};
+
+export type SecurityResponse = {
+  twoFactorEnabled?: boolean | null;
+  signInAlerts?: boolean | null;
+  hasPassword?: boolean | null;
+  passwordChangedAt?: string | null;
+  sessions?: SecuritySessionApi[] | null;
+};
+
+export function getSecurity(bearer: string) {
+  return backendFetch<SecurityResponse>("/organizer/workspace/security", {
+    bearer,
+  });
+}
+
+export function updateSecurity(
+  bearer: string,
+  body: { signInAlerts?: boolean; twoFactorEnabled?: boolean },
+  userAgent?: string | null,
+) {
+  return backendFetch<SecurityResponse>("/organizer/workspace/security", {
+    method: "PATCH",
+    body,
+    bearer,
+    userAgent,
+  });
+}
+
+export function revokeSecuritySession(
+  bearer: string,
+  sessionId: string,
+  userAgent?: string | null,
+) {
+  return backendFetch(
+    `/organizer/workspace/security/sessions/${sessionId}`,
+    { method: "DELETE", bearer, userAgent },
+  );
+}
+
+function formatSessionWhen(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(at);
+}
+
+export function normalizeSecurity(payload: unknown): SecuritySettings {
+  const obj =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : {};
+  const nested =
+    obj.data && typeof obj.data === "object"
+      ? (obj.data as Record<string, unknown>)
+      : obj;
+  const sessionsRaw = Array.isArray(nested.sessions)
+    ? (nested.sessions as SecuritySessionApi[])
+    : [];
+  const sessions: SecuritySession[] = sessionsRaw.map((row, index) => ({
+    id: row.id || `session-${index}`,
+    label: row.label?.trim() || (row.current ? "This device" : "Unknown device"),
+    current: Boolean(row.current),
+    lastActiveLabel: formatSessionWhen(row.lastActiveAt),
+  }));
+
+  return {
+    twoFactorEnabled: asBool(nested.twoFactorEnabled, false),
+    signInAlerts: asBool(nested.signInAlerts, true),
+    hasPassword: asBool(nested.hasPassword, true),
+    passwordChangedLabel: nested.passwordChangedAt
+      ? `Changed ${formatSessionWhen(String(nested.passwordChangedAt))}`
+      : null,
+    sessions,
+  };
+}
+
+export function securityRowsFrom(
+  settings: SecuritySettings,
+): SettingsStatusRow[] {
+  return [
+    {
+      id: "s1",
+      label: "Two-step verification",
+      status: settings.twoFactorEnabled ? "On" : "Off",
+      detail: settings.twoFactorEnabled
+        ? "Extra check on sign-in."
+        : "Password sign-in only.",
+      statusAccent: settings.twoFactorEnabled,
+    },
+    {
+      id: "s2",
+      label: "Active sessions",
+      status: String(settings.sessions.length),
+      detail:
+        settings.sessions.length === 1
+          ? "Including this device."
+          : `${settings.sessions.length} devices signed in.`,
+    },
+    {
+      id: "s3",
+      label: "Sign-in alerts",
+      status: settings.signInAlerts ? "On" : "Off",
+      detail: "Email when a new device signs in.",
+      statusAccent: settings.signInAlerts,
+    },
+  ];
+}
+
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -191,12 +314,14 @@ export async function getSettings(): Promise<SettingsResult> {
   const bearer = await readToken();
   if (!bearer) return UNAUTHORIZED;
 
-  const [workspace, profile, notifications, defaults] = await Promise.all([
-    getWorkspace(bearer),
-    getOrganisationProfile(bearer),
-    getNotifications(bearer),
-    getEventDefaults(bearer),
-  ]);
+  const [workspace, profile, notifications, defaults, security] =
+    await Promise.all([
+      getWorkspace(bearer),
+      getOrganisationProfile(bearer),
+      getNotifications(bearer),
+      getEventDefaults(bearer),
+      getSecurity(bearer),
+    ]);
 
   // Soft-fail individual sections so one missing route doesn't kill Settings.
   const workspaceName =
@@ -222,31 +347,17 @@ export async function getSettings(): Promise<SettingsResult> {
     ? normalizeEventDefaults(defaults.data)
     : normalizeEventDefaults({});
 
+  const securitySettings = security.ok
+    ? normalizeSecurity(security.data)
+    : normalizeSecurity({});
+
   const data: SettingsData = {
     eventMeta: "Workspace preferences, security and event defaults.",
     organisation,
     notifications: notificationSettings,
     eventDefaults,
-    security: [
-      {
-        id: "s1",
-        label: "Two-step verification",
-        status: "—",
-        detail: "Not available from the organizer API yet.",
-      },
-      {
-        id: "s2",
-        label: "Active sessions",
-        status: "—",
-        detail: "Not available from the organizer API yet.",
-      },
-      {
-        id: "s3",
-        label: "Sign-in alerts",
-        status: "—",
-        detail: "Not available from the organizer API yet.",
-      },
-    ],
+    security: securityRowsFrom(securitySettings),
+    securitySettings,
     workspaceControls: {
       body: "Deleting a workspace requires Owner verification. Financial records follow retention rules. Delete is not available from the API yet.",
     },
@@ -254,6 +365,7 @@ export async function getSettings(): Promise<SettingsResult> {
       organisation: profile.ok ? null : profile.message,
       notifications: notifications.ok ? null : notifications.message,
       eventDefaults: defaults.ok ? null : defaults.message,
+      security: security.ok ? null : security.message,
     },
   };
 

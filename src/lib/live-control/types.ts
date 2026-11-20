@@ -59,12 +59,15 @@ export type SquadScore = {
   detail: string;
 };
 
+export type LivePhaseState = "running" | "paused" | "ended" | "unknown";
+
 export type LiveControlData = {
   eventTitle: string;
   eventMeta: string;
   syncLabel: string;
   /** Backend moment id for the live prompt, when one is running. */
   activeMomentId: string | null;
+  livePhase: LivePhaseState;
   metrics: LiveMetric[];
   livePrompt: {
     indexLabel: string;

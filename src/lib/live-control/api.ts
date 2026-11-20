@@ -68,3 +68,24 @@ export function startLiveMoment(
     body,
   });
 }
+
+export function pauseLivePhase(experienceId: string) {
+  return organizerFetch(`/experiences/${experienceId}/live/pause`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+export function resumeLivePhase(experienceId: string) {
+  return organizerFetch(`/experiences/${experienceId}/live/resume`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+export function endLivePhase(experienceId: string, confirm = true) {
+  return organizerFetch(`/experiences/${experienceId}/live/end`, {
+    method: "POST",
+    body: { confirm },
+  });
+}

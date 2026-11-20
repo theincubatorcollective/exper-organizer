@@ -1,8 +1,11 @@
 import { describe, expect, test } from "vitest";
 import {
+  accessSoldFromSummary,
   buildAccessSoldRows,
   buildLedgers,
   buildMetrics,
+  ledgersFromApi,
+  metricsFromSummary,
   normalizeOrder,
 } from "./sales";
 
@@ -77,6 +80,116 @@ describe("buildMetrics", () => {
       value: "₦5,000",
     });
     expect(metrics[2].value).toBe("₦20,000");
+  });
+});
+
+describe("metricsFromSummary", () => {
+  test("maps summary gross / refunds / fees into metric cards", () => {
+    const metrics = metricsFromSummary(
+      {
+        currency: "NGN",
+        grossTicketSales: 35300000,
+        grossOrderCount: 1012,
+        refundsAmount: 425000,
+        refundsGuestPlaces: 17,
+        feesAmount: 1046250,
+        netAfterFees: 33828750,
+      },
+      "NGN",
+    );
+    expect(metrics[0]).toMatchObject({
+      label: "Gross ticket sales",
+      value: "₦35,300,000",
+      detail: "NGN · 1,012 orders",
+    });
+    expect(metrics[1]).toMatchObject({
+      label: "Refunds",
+      value: "₦425,000",
+      detail: "17 guest places",
+    });
+    expect(metrics[2]).toMatchObject({
+      label: "Net after fees",
+      value: "₦33,828,750",
+      detail: "₦1,046,250 fees",
+    });
+  });
+
+  test("notes missing fees when feesAmount is null", () => {
+    const metrics = metricsFromSummary(
+      {
+        currency: "NGN",
+        grossTicketSales: 1000,
+        refundsAmount: 0,
+        feesAmount: null,
+        netAfterFees: null,
+      },
+      "NGN",
+    );
+    expect(metrics[2].detail).toMatch(/not configured/i);
+  });
+});
+
+describe("accessSoldFromSummary", () => {
+  test("maps accessSold rows from summary", () => {
+    expect(
+      accessSoldFromSummary(
+        {
+          currency: "NGN",
+          accessSold: [
+            {
+              ticketTypeId: "ga",
+              name: "General Access",
+              unitAmount: 25000,
+              ticketsSold: 2,
+              guestPlaces: 2,
+              grossAmount: 50000,
+            },
+          ],
+        },
+        "NGN",
+      ),
+    ).toEqual([
+      {
+        id: "ga",
+        title: "General Access",
+        amount: "₦50,000",
+        detail: "₦25,000 x 2 tickets · 2 guests",
+      },
+    ]);
+  });
+});
+
+describe("ledgersFromApi", () => {
+  test("skips the current experience and formats gross", () => {
+    expect(
+      ledgersFromApi(
+        {
+          data: [
+            {
+              experienceId: "a",
+              title: "Neon",
+              city: "Lagos",
+              currency: "NGN",
+              grossAmount: 1000,
+            },
+            {
+              experienceId: "b",
+              title: "Rooftop Sessions",
+              city: "London",
+              currency: "GBP",
+              grossAmount: 6545,
+            },
+          ],
+        },
+        "a",
+      ),
+    ).toEqual([
+      {
+        id: "b",
+        primary: "London · GBP · £6,545",
+        event: "Rooftop Sessions",
+      },
+    ]);
   });
 });
 

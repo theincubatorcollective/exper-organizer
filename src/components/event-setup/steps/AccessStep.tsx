@@ -7,9 +7,10 @@ import {
   createTicketTypeOnExperience,
   deleteTicketTypeOnExperience,
   isPersistedTicketId,
+  updateTicketTypeOnExperience,
 } from "@/lib/event-setup/api";
 import { formatNaira, totalGuestCapacity } from "@/lib/event-setup/mock";
-import type { AccessMode } from "@/lib/event-setup/types";
+import type { AccessMode, TicketType } from "@/lib/event-setup/types";
 import { useEventSetup } from "../EventSetupProvider";
 import { SetupField, SetupInput, SetupSelect } from "../SetupField";
 import { SetupShell } from "../SetupShell";
@@ -28,16 +29,69 @@ const MODES: { id: AccessMode; label: string }[] = [
   { id: "invite", label: "Invite only" },
 ];
 
+type TicketFormState = {
+  name: string;
+  price: string;
+  quantity: string;
+  guestsPerTicket: string;
+  description: string;
+};
+
+const EMPTY_FORM: TicketFormState = {
+  name: "",
+  price: "25000",
+  quantity: "100",
+  guestsPerTicket: "1",
+  description: "",
+};
+
+function formFromTicket(ticket: TicketType): TicketFormState {
+  return {
+    name: ticket.name,
+    price: String(ticket.price),
+    quantity: String(ticket.quantity),
+    guestsPerTicket: String(ticket.guestsPerTicket || 1),
+    description: ticket.description || "",
+  };
+}
+
 export function AccessStep() {
-  const { draft, setDraft, addTicket, removeTicket } = useEventSetup();
+  const { draft, setDraft, addTicket, updateTicket, removeTicket } =
+    useEventSetup();
   const capacity = totalGuestCapacity(draft.tickets);
-  const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [price, setPrice] = useState("25000");
-  const [quantity, setQuantity] = useState("100");
+  const [formMode, setFormMode] = useState<"closed" | "create" | "edit">(
+    "closed",
+  );
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<TicketFormState>(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+
+  function patchForm(patch: Partial<TicketFormState>) {
+    setForm((current) => ({ ...current, ...patch }));
+  }
+
+  function openCreate() {
+    setError(null);
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setFormMode("create");
+  }
+
+  function openEdit(ticket: TicketType) {
+    setError(null);
+    setEditingId(ticket.id);
+    setForm(formFromTicket(ticket));
+    setFormMode("edit");
+  }
+
+  function closeForm() {
+    setFormMode("closed");
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setError(null);
+  }
 
   async function ensureExperienceId(): Promise<string | null> {
     if (draft.experienceId) return draft.experienceId;
@@ -50,36 +104,86 @@ export function AccessStep() {
     return created.data.id;
   }
 
-  async function onAddTicket(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-
-    const trimmed = name.trim();
-    const priceAmount = Number(price);
-    const quantityTotal = Number(quantity);
-    if (!trimmed) {
+  function parseForm(): {
+    name: string;
+    priceAmount: number;
+    quantityTotal: number;
+    guestsPerTicket: number;
+    description: string;
+  } | null {
+    const name = form.name.trim();
+    const priceAmount = Number(form.price);
+    const quantityTotal = Number(form.quantity);
+    const guestsPerTicket = Number(form.guestsPerTicket);
+    if (!name) {
       setError("Give this ticket type a name.");
-      return;
+      return null;
     }
     if (!Number.isFinite(priceAmount) || priceAmount < 0) {
       setError("Enter a valid price.");
-      return;
+      return null;
     }
     if (!Number.isFinite(quantityTotal) || quantityTotal < 1) {
       setError("Enter a quantity of at least 1.");
-      return;
+      return null;
     }
+    if (!Number.isFinite(guestsPerTicket) || guestsPerTicket < 1) {
+      setError("Guests per ticket must be at least 1.");
+      return null;
+    }
+    return {
+      name,
+      priceAmount,
+      quantityTotal,
+      guestsPerTicket,
+      description: form.description.trim(),
+    };
+  }
+
+  async function onSaveTicket(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    const parsed = parseForm();
+    if (!parsed) return;
 
     setBusy(true);
     try {
+      if (formMode === "edit" && editingId) {
+        if (draft.experienceId && isPersistedTicketId(editingId)) {
+          const updated = await updateTicketTypeOnExperience(
+            draft.experienceId,
+            editingId,
+            parsed,
+          );
+          if (!updated.ok) {
+            setError(updated.message);
+            return;
+          }
+          updateTicket(editingId, {
+            name: updated.data.name || parsed.name,
+            price: updated.data.price ?? parsed.priceAmount,
+            quantity: updated.data.quantity ?? parsed.quantityTotal,
+            guestsPerTicket:
+              updated.data.guestsPerTicket || parsed.guestsPerTicket,
+            description: updated.data.description || parsed.description,
+          });
+        } else {
+          updateTicket(editingId, {
+            name: parsed.name,
+            price: parsed.priceAmount,
+            quantity: parsed.quantityTotal,
+            guestsPerTicket: parsed.guestsPerTicket,
+            description: parsed.description,
+          });
+        }
+        closeForm();
+        return;
+      }
+
       const experienceId = await ensureExperienceId();
       if (!experienceId) return;
 
-      const created = await createTicketTypeOnExperience(experienceId, {
-        name: trimmed,
-        priceAmount,
-        quantityTotal,
-      });
+      const created = await createTicketTypeOnExperience(experienceId, parsed);
       if (!created.ok) {
         setError(created.message);
         return;
@@ -87,13 +191,10 @@ export function AccessStep() {
 
       addTicket({
         ...created.data,
-        guestsPerTicket: created.data.guestsPerTicket || 1,
-        description: created.data.description || "",
+        guestsPerTicket: created.data.guestsPerTicket || parsed.guestsPerTicket,
+        description: created.data.description || parsed.description,
       });
-      setName("");
-      setPrice("25000");
-      setQuantity("100");
-      setAdding(false);
+      closeForm();
     } finally {
       setBusy(false);
     }
@@ -113,6 +214,7 @@ export function AccessStep() {
           return;
         }
       }
+      if (editingId === ticketId) closeForm();
       removeTicket(ticketId);
     } finally {
       setRemovingId(null);
@@ -132,7 +234,9 @@ export function AccessStep() {
             <SetupSelect
               value={draft.currency}
               onChange={(e) => {
-                const next = CURRENCIES.find((item) => item.value === e.target.value);
+                const next = CURRENCIES.find(
+                  (item) => item.value === e.target.value,
+                );
                 setDraft({
                   currency: e.target.value,
                   currencyLabel: next?.label ?? e.target.value,
@@ -181,39 +285,51 @@ export function AccessStep() {
                     } · ${ticket.description}`}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void onRemoveTicket(ticket.id)}
-                  disabled={removingId === ticket.id}
-                  className="shrink-0 text-[11px] font-semibold text-muted hover:text-fg disabled:opacity-50"
-                >
-                  {removingId === ticket.id ? "Removing…" : "Remove"}
-                </button>
+                <div className="flex shrink-0 items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(ticket)}
+                    className="text-[11px] font-semibold text-muted hover:text-fg"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void onRemoveTicket(ticket.id)}
+                    disabled={removingId === ticket.id}
+                    className="text-[11px] font-semibold text-muted hover:text-fg disabled:opacity-50"
+                  >
+                    {removingId === ticket.id ? "Removing…" : "Remove"}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
 
-          {adding ? (
+          {formMode !== "closed" ? (
             <form
-              onSubmit={(e) => void onAddTicket(e)}
+              onSubmit={(e) => void onSaveTicket(e)}
               className="flex flex-col gap-3 rounded-2xl bg-surface-2 p-4"
             >
+              <p className="text-xs font-semibold text-muted">
+                {formMode === "edit" ? "Edit ticket type" : "New ticket type"}
+              </p>
               <SetupField label="Ticket name">
                 <SetupInput
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={form.name}
+                  onChange={(e) => patchForm({ name: e.target.value })}
                   placeholder="General Access"
                   autoFocus
                 />
               </SetupField>
               <div className="grid gap-3 sm:grid-cols-2">
-                <SetupField label="Price (NGN)">
+                <SetupField label={`Price (${draft.currency})`}>
                   <SetupInput
                     type="number"
                     min={0}
                     step={1}
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
+                    value={form.price}
+                    onChange={(e) => patchForm({ price: e.target.value })}
                   />
                 </SetupField>
                 <SetupField label="Quantity">
@@ -221,8 +337,28 @@ export function AccessStep() {
                     type="number"
                     min={1}
                     step={1}
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
+                    value={form.quantity}
+                    onChange={(e) => patchForm({ quantity: e.target.value })}
+                  />
+                </SetupField>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <SetupField label="Guests per ticket">
+                  <SetupInput
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={form.guestsPerTicket}
+                    onChange={(e) =>
+                      patchForm({ guestsPerTicket: e.target.value })
+                    }
+                  />
+                </SetupField>
+                <SetupField label="Description">
+                  <SetupInput
+                    value={form.description}
+                    onChange={(e) => patchForm({ description: e.target.value })}
+                    placeholder="Standard floor access"
                   />
                 </SetupField>
               </div>
@@ -232,15 +368,16 @@ export function AccessStep() {
                   disabled={busy}
                   className="rounded-full bg-accent px-4 py-2 text-xs font-semibold text-accent-fg disabled:opacity-50"
                 >
-                  {busy ? "Saving…" : "Save ticket type"}
+                  {busy
+                    ? "Saving…"
+                    : formMode === "edit"
+                      ? "Save changes"
+                      : "Save ticket type"}
                 </button>
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => {
-                    setAdding(false);
-                    setError(null);
-                  }}
+                  onClick={closeForm}
                   className="rounded-full bg-surface px-4 py-2 text-xs font-semibold text-muted hover:text-fg disabled:opacity-50"
                 >
                   Cancel
@@ -250,10 +387,7 @@ export function AccessStep() {
           ) : (
             <button
               type="button"
-              onClick={() => {
-                setAdding(true);
-                setError(null);
-              }}
+              onClick={openCreate}
               className="inline-flex w-fit items-center gap-2 rounded-full bg-surface-2 px-4 py-2 text-xs font-semibold hover:text-fg"
             >
               <span aria-hidden>+</span>
@@ -269,20 +403,22 @@ export function AccessStep() {
 
           <div>
             <p className="text-sm">
-              Total guest capacity · {capacity.total.toLocaleString("en-GB")} places
+              Total guest capacity · {capacity.total.toLocaleString("en-GB")}{" "}
+              places
             </p>
             <p className="mt-1 text-[11px] text-muted">{capacity.breakdown}</p>
           </div>
 
           <div className="rounded-2xl bg-surface-2 px-4 py-4">
-            <p className="text-[11px] text-muted">Sales close · {draft.timezone}</p>
+            <p className="text-[11px] text-muted">
+              Sales close · {draft.timezone}
+            </p>
             <p className="mt-1 text-sm">{draft.salesCloseLabel}</p>
           </div>
 
           <div>
             <p className="text-sm">
-              Refund policy ·{" "}
-              <span className="text-muted">Edit</span>
+              Refund policy · <span className="text-muted">Edit</span>
             </p>
             <p className="mt-1 text-[11px] text-muted">{draft.refundPolicy}</p>
           </div>

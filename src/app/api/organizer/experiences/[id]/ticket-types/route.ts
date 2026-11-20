@@ -39,7 +39,23 @@ export async function POST(request: Request, { params }: Params) {
     );
   }
 
-  const body: TicketTypeWriteBody = { name, priceAmount, quantityTotal };
+  const guestsPerTicket =
+    typeof parsed.body.guestsPerTicket === "number" &&
+    Number.isFinite(parsed.body.guestsPerTicket)
+      ? parsed.body.guestsPerTicket
+      : undefined;
+  const description =
+    typeof parsed.body.description === "string"
+      ? parsed.body.description.trim()
+      : undefined;
+
+  const body: TicketTypeWriteBody = {
+    name,
+    priceAmount,
+    quantityTotal,
+    ...(guestsPerTicket !== undefined ? { guestsPerTicket } : {}),
+    ...(description !== undefined ? { description } : {}),
+  };
   const result = await createTicketType(
     auth.bearer,
     experienceId,
@@ -52,6 +68,8 @@ export async function POST(request: Request, { params }: Params) {
     name,
     price: priceAmount,
     quantity: quantityTotal,
+    guestsPerTicket,
+    description,
   });
   if (!ticket) {
     return Response.json(

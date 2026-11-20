@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
+  isPendingReviewStatus,
+  isPublishAcceptedStatus,
   sortFor,
   statusFromExperiencePayload,
   tabFor,
@@ -101,6 +103,24 @@ describe("statusFromExperiencePayload", () => {
     expect(
       statusFromExperiencePayload({ data: { state: "published" } }),
     ).toBe("published");
+  });
+
+  test("recognises pending_review as accepted but not listed", () => {
+    expect(statusFromExperiencePayload({ status: "pending_review" })).toBe(
+      "pending_review",
+    );
+    expect(isPendingReviewStatus("pending_review")).toBe(true);
+    expect(isPublishAcceptedStatus("pending_review")).toBe(true);
+    expect(
+      tabFor(
+        {
+          status: "pending_review",
+          startsAt: "2026-12-20T19:00:00Z",
+          endsAt: "2026-12-21T02:00:00Z",
+        },
+        new Date("2026-11-19T12:00:00Z"),
+      ),
+    ).toBe("drafts");
   });
 });
 

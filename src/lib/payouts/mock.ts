@@ -9,6 +9,12 @@ export function designPayouts(): PayoutsData {
     activeCurrency: "NGN",
     eventFilter: "All NGN events",
     dateFilter: "01–25 Oct 2026",
+    filters: {
+      from: "2026-10-01",
+      to: "2026-10-25",
+      experienceId: null,
+      datePreset: "all",
+    },
     metrics: [
       {
         label: "Available NGN",
@@ -29,7 +35,9 @@ export function designPayouts(): PayoutsData {
     transfer: {
       fromBalance: "NGN — Available ₦8,275,000",
       bankAccount: "Afterhours Studio Ltd · GTBank · •••• 4829",
+      bankAccountId: "bank-1",
       amount: "₦8,275,000",
+      availableAmount: 8275000,
       footnote:
         "Estimated arrival: 28 Oct 2026. No FX conversion. A transfer confirmation is required before funds leave this balance.",
     },
@@ -104,5 +112,24 @@ export function designPayouts(): PayoutsData {
         detail: "No settled sales yet",
       },
     ],
+    bankAccounts: [
+      {
+        id: "bank-1",
+        label: "Afterhours Studio Ltd · GTBank · •••• 4829",
+        currency: "NGN",
+        isDefault: true,
+        status: "verified",
+      },
+    ],
+    bankOptions: [
+      { code: "058", name: "GTBank" },
+      { code: "044", name: "Access Bank" },
+    ],
+    experiences: [
+      { id: "neon", title: "Neon Solstice" },
+      { id: "accra", title: "Accra After Dark" },
+    ],
+    payoutsEnabled: true,
+    exportAvailable: false,
   };
 }

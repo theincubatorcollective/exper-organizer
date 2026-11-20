@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { coverFromExperiencePayload } from "@/lib/events/cover";
 import { mockOverview } from "@/lib/overview/mock";
 import { selectComingUp, selectHero } from "@/lib/overview/select";
 import type {
@@ -112,7 +113,7 @@ async function loadHero(
   const detail: EventDetail = detailResult.ok
     ? {
         ...event,
-        coverImageUrl: detailResult.data.coverImageUrl,
+        coverImageUrl: coverFromExperiencePayload(detailResult.data),
         timezone: detailResult.data.timezone,
         capacity: detailResult.data.capacity,
         venue: {

@@ -1,11 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { buttonClasses } from "@/components/auth/Button";
 import { Card } from "@/components/overview/Card";
 import { SetupField, SetupInput, SetupSelect, SetupTextarea } from "@/components/event-setup/SetupField";
-import { designExperienceBuilder } from "@/lib/experience-builder/mock";
-import type { BuilderPrompt } from "@/lib/experience-builder/types";
+import {
+  newLocalPrompt,
+  saveRunOfShow,
+} from "@/lib/experience-builder/api";
+import type {
+  BuilderPrompt,
+  ExperienceBuilderData,
+} from "@/lib/experience-builder/types";
+import { builderPromptToApi } from "@/lib/experience-builder/map";
 
 type EditorTab = "content" | "delivery" | "scoring";
 
@@ -22,13 +29,22 @@ const AUDIENCES = [
   "VIP only",
 ];
 
-export function ExperienceBuilder() {
-  const initial = useMemo(() => designExperienceBuilder(), []);
-  const [prompts, setPrompts] = useState(initial.prompts);
+export function ExperienceBuilder({
+  data,
+  experienceId,
+}: {
+  data: ExperienceBuilderData;
+  experienceId: string;
+}) {
+  const [prompts, setPrompts] = useState(data.prompts);
+  const [meta, setMeta] = useState(data.meta);
   const [selectedId, setSelectedId] = useState(
-    () => initial.prompts.find((p) => p.status === "selected")?.id ?? initial.prompts[0]?.id,
+    () => data.prompts.find((p) => p.status === "selected")?.id ?? data.prompts[0]?.id,
   );
   const [tab, setTab] = useState<EditorTab>("content");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const selected = prompts.find((p) => p.id === selectedId) ?? prompts[0];
 
@@ -41,6 +57,33 @@ export function ExperienceBuilder() {
     );
   }
 
+  function onAddPrompt() {
+    const next = newLocalPrompt();
+    setPrompts((current) => [...current, next]);
+    setSelectedId(next.id);
+    setMessage(null);
+    setError(null);
+  }
+
+  async function onSave() {
+    setError(null);
+    setMessage(null);
+    setSaving(true);
+    try {
+      const day = new Date().toISOString();
+      const payload = prompts.map((prompt) => builderPromptToApi(prompt, day));
+      const result = await saveRunOfShow(experienceId, payload);
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      setMeta(`Run-of-show · saved just now`);
+      setMessage("Run of show saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
       <div className="flex flex-col gap-6">
@@ -49,14 +92,14 @@ export function ExperienceBuilder() {
             Experience Builder
           </h1>
           <p className="mt-2 text-[11px] text-muted">
-            {`${initial.eventTitle} · ${initial.meta}`}
+            {`${data.eventTitle} · ${meta}`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            aria-disabled="true"
-            className={buttonClasses("primary", "cursor-not-allowed gap-2")}
+            onClick={onAddPrompt}
+            className={buttonClasses("primary", "gap-2")}
           >
             <span aria-hidden>+</span>
             Add prompt
@@ -71,13 +114,25 @@ export function ExperienceBuilder() {
           </button>
           <button
             type="button"
-            aria-disabled="true"
-            className={buttonClasses("secondary", "cursor-not-allowed gap-2")}
+            onClick={() => void onSave()}
+            disabled={saving}
+            className={buttonClasses(
+              "secondary",
+              `gap-2 ${saving ? "cursor-not-allowed opacity-70" : ""}`,
+            )}
           >
             <span aria-hidden>✓</span>
-            Save version
+            {saving ? "Saving…" : "Save version"}
           </button>
         </div>
+        {error ? (
+          <p role="alert" className="text-[11px] text-red-400">
+            {error}
+          </p>
+        ) : null}
+        {message ? (
+          <p className="text-[11px] text-muted">{message}</p>
+        ) : null}
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.35fr)_minmax(16rem,0.85fr)] xl:items-start">
@@ -93,7 +148,18 @@ export function ExperienceBuilder() {
             tab={tab}
             onTabChange={setTab}
             onChange={updateSelected}
-            disclaimer={initial.disclaimer}
+            disclaimer={data.disclaimer}
+            saving={saving}
+            onSave={() => void onSave()}
+            onRemove={() => {
+              setPrompts((current) => {
+                const next = current.filter((p) => p.id !== selected.id);
+                setSelectedId(next[0]?.id);
+                return next;
+              });
+              setMessage("Prompt removed. Click Save prompt to persist.");
+              setError(null);
+            }}
           />
         ) : null}
 
@@ -174,12 +240,18 @@ function EditorCard({
   onTabChange,
   onChange,
   disclaimer,
+  saving,
+  onSave,
+  onRemove,
 }: {
   prompt: BuilderPrompt;
   tab: EditorTab;
   onTabChange: (tab: EditorTab) => void;
   onChange: (patch: Partial<BuilderPrompt>) => void;
   disclaimer: string;
+  saving: boolean;
+  onSave: () => void;
+  onRemove: () => void;
 }) {
   const tabs: { id: EditorTab; label: string }[] = [
     { id: "content", label: "Content" },
@@ -287,17 +359,22 @@ function EditorCard({
       <div className="mt-6 flex flex-wrap gap-3">
         <button
           type="button"
-          aria-disabled="true"
-          className={buttonClasses("primary", "cursor-not-allowed")}
+          onClick={onSave}
+          disabled={saving}
+          className={buttonClasses(
+            "primary",
+            saving ? "cursor-not-allowed opacity-70" : "",
+          )}
         >
-          Save prompt
+          {saving ? "Saving…" : "Save prompt"}
         </button>
         <button
           type="button"
-          aria-disabled="true"
+          onClick={onRemove}
+          disabled={saving}
           className={buttonClasses(
             "secondary",
-            "cursor-not-allowed gap-2 text-danger hover:text-danger",
+            `gap-2 text-danger hover:text-danger ${saving ? "cursor-not-allowed opacity-70" : ""}`,
           )}
         >
           <span aria-hidden>🗑</span>
@@ -318,6 +395,8 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 }
 
 function PromptPreview({ prompt }: { prompt: BuilderPrompt }) {
+  const [note, setNote] = useState<string | null>(null);
+
   return (
     <aside className="w-full max-w-sm justify-self-center xl:justify-self-end">
       <p className="mb-3 text-[10px] font-semibold tracking-[0.14em] text-muted">
@@ -339,17 +418,21 @@ function PromptPreview({ prompt }: { prompt: BuilderPrompt }) {
             {prompt.supportingText}
           </p>
           <div className="rounded-2xl bg-surface-2 px-4 py-3 text-sm text-muted">
-            Your answer · {prompt.answerPlaceholder}
+            {prompt.answerPlaceholder || "Your answer"}
           </div>
           <button
             type="button"
-            aria-disabled="true"
+            onClick={() =>
+              setNote(
+                "This is a layout preview only. To send a prompt to the room, open Live Control and start the moment.",
+              )
+            }
             className="rounded-full bg-accent px-5 py-3 text-sm font-semibold text-accent-fg"
           >
             {prompt.ctaLabel}
           </button>
           <p className="text-[10px] leading-relaxed text-muted">
-            Preview only · Nothing is sent to attendees.
+            {note ?? "Preview only · Nothing is sent to attendees."}
           </p>
         </div>
       </div>

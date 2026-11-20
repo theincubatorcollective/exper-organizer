@@ -2,6 +2,7 @@ import type {
   EventDefaultsSettings,
   NotificationSettings,
   OrganisationProfile,
+  SecuritySettings,
 } from "./types";
 
 type ApiFailure = { ok: false; status: number; message: string };
@@ -10,14 +11,18 @@ type ApiResult<T> = ApiSuccess<T> | ApiFailure;
 
 async function workspaceFetch<T>(
   path: string,
-  body: unknown,
+  init: { method?: "GET" | "PATCH" | "DELETE"; body?: unknown } = {},
 ): Promise<ApiResult<T>> {
+  const method = init.method ?? "PATCH";
   let response: Response;
   try {
     response = await fetch(`/api/organizer/workspace${path}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+      method,
+      headers:
+        init.body === undefined
+          ? undefined
+          : { "content-type": "application/json" },
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
     });
   } catch {
     return {
@@ -25,6 +30,10 @@ async function workspaceFetch<T>(
       status: 502,
       message: "Couldn't reach the server. Try again.",
     };
+  }
+
+  if (response.status === 204) {
+    return { ok: true, status: 204, data: undefined as T };
   }
 
   const text = await response.text();
@@ -50,13 +59,23 @@ async function workspaceFetch<T>(
 }
 
 export function saveOrganisation(body: OrganisationProfile) {
-  return workspaceFetch<OrganisationProfile>("/settings", body);
+  return workspaceFetch<OrganisationProfile>("/settings", { body });
 }
 
 export function saveNotifications(body: NotificationSettings) {
-  return workspaceFetch<NotificationSettings>("/notifications", body);
+  return workspaceFetch<NotificationSettings>("/notifications", { body });
 }
 
 export function saveEventDefaults(body: EventDefaultsSettings) {
-  return workspaceFetch<EventDefaultsSettings>("/event-defaults", body);
+  return workspaceFetch<EventDefaultsSettings>("/event-defaults", { body });
+}
+
+export function saveSecurity(body: { signInAlerts: boolean }) {
+  return workspaceFetch<SecuritySettings>("/security", { body });
+}
+
+export function revokeSession(sessionId: string) {
+  return workspaceFetch(`/security/sessions/${sessionId}`, {
+    method: "DELETE",
+  });
 }

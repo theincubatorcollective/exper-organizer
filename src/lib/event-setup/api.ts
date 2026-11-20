@@ -1,28 +1,20 @@
 import {
+  isPublishAcceptedStatus,
   rawStatusFromExperiencePayload,
   statusFromExperiencePayload,
   tabForExperiencePayload,
 } from "@/lib/events/classify";
 import type { EventTab } from "@/lib/events/types";
+import { toApiCategory } from "./categories";
 import { parseEventLabel, partsToDate } from "./datetime";
 import type { EventDraft, TicketType } from "./types";
 import { totalGuestCapacity } from "./mock";
 
+export { toApiCategory } from "./categories";
+
 type ApiFailure = { ok: false; status: number; message: string };
 type ApiSuccess<T> = { ok: true; status: number; data: T };
 type ApiResult<T> = ApiSuccess<T> | ApiFailure;
-
-/** Slug API category from a Basics label like "Music & nightlife". */
-export function toApiCategory(label: string): string {
-  const lower = label.trim().toLowerCase();
-  if (!lower) return "other";
-  if (lower.includes("music")) return "music";
-  if (lower.includes("sport")) return "sports";
-  if (lower.includes("art") || lower.includes("culture")) return "arts";
-  if (lower.includes("food") || lower.includes("drink")) return "food";
-  const token = lower.replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/)[0];
-  return token || "other";
-}
 
 async function organizerFetch<T>(
   path: string,
@@ -156,86 +148,105 @@ export function publishExperience(
 }
 
 async function readPublishState(experienceId: string): Promise<{
-  published: boolean;
+  accepted: boolean;
+  lifecycle: "published" | "pending_review" | "draft";
   raw: string;
 }> {
   const got = await fetchExperience(experienceId);
   if (!got.ok) {
-    return { published: false, raw: `could not re-fetch (${got.message})` };
+    return {
+      accepted: false,
+      lifecycle: "draft",
+      raw: `could not re-fetch (${got.message})`,
+    };
   }
+  const lifecycle = statusFromExperiencePayload(got.data);
   return {
-    published: statusFromExperiencePayload(got.data) === "published",
+    accepted: isPublishAcceptedStatus(lifecycle),
+    lifecycle,
     raw: rawStatusFromExperiencePayload(got.data),
   };
 }
 
-function looksPublished(payload: unknown): boolean {
-  return statusFromExperiencePayload(payload) === "published";
+function looksPublishAccepted(payload: unknown): boolean {
+  return isPublishAcceptedStatus(statusFromExperiencePayload(payload));
 }
 
-async function confirmPublishedTab(
+async function confirmPublishTab(
   experienceId: string,
   httpStatus: number,
-): Promise<ApiResult<{ status: "published"; tab: EventTab }>> {
+): Promise<
+  ApiResult<{ status: "published" | "pending_review"; tab: EventTab }>
+> {
   const got = await fetchExperience(experienceId);
   const payload = got.ok ? got.data : null;
+  const lifecycle = statusFromExperiencePayload(payload);
   return {
     ok: true,
     status: httpStatus,
     data: {
-      status: "published",
+      status: lifecycle === "pending_review" ? "pending_review" : "published",
       tab: tabForExperiencePayload(payload),
     },
   };
 }
 
 /**
- * Publish, then confirm status. If POST /publish leaves the event as draft,
- * try a few PATCH shapes some backends accept for publication.
- * Returns the Events tab the experience belongs on (upcoming / live / past).
+ * Publish, then confirm status.
+ * Success = `published` **or** `pending_review` (backend moderation queue).
+ * Returns the Events tab the experience belongs on.
  */
 export async function publishExperienceAndConfirm(
   experienceId: string,
-): Promise<ApiResult<{ status: "published"; tab: EventTab }>> {
+): Promise<
+  ApiResult<{ status: "published" | "pending_review"; tab: EventTab }>
+> {
   const published = await publishExperience(experienceId);
   if (!published.ok) return published;
 
-  if (looksPublished(published.data)) {
-    return confirmPublishedTab(experienceId, published.status);
+  if (looksPublishAccepted(published.data)) {
+    return confirmPublishTab(experienceId, published.status);
   }
 
   let state = await readPublishState(experienceId);
-  if (state.published) {
-    return confirmPublishedTab(experienceId, published.status);
+  if (state.accepted) {
+    return confirmPublishTab(experienceId, published.status);
   }
 
-  const fallbackBodies: Record<string, unknown>[] = [
-    { status: "published" },
-    { state: "published" },
-    { publicationStatus: "published" },
-    { isPublished: true },
-    { published: true },
-  ];
+  // Only fall back to PATCH when still a plain draft — not after pending_review.
+  if (state.lifecycle === "draft") {
+    const fallbackBodies: Record<string, unknown>[] = [
+      { status: "published" },
+      { state: "published" },
+      { publicationStatus: "published" },
+      { isPublished: true },
+      { published: true },
+    ];
 
-  for (const body of fallbackBodies) {
-    const patched = await organizerFetch(`/experiences/${experienceId}`, {
-      method: "PATCH",
-      body,
-    });
-    if (!patched.ok) continue;
-    if (
-      looksPublished(patched.data) ||
-      (await readPublishState(experienceId)).published
-    ) {
-      return confirmPublishedTab(experienceId, patched.status);
+    for (const body of fallbackBodies) {
+      const patched = await organizerFetch(`/experiences/${experienceId}`, {
+        method: "PATCH",
+        body,
+      });
+      if (!patched.ok) continue;
+      if (
+        looksPublishAccepted(patched.data) ||
+        (await readPublishState(experienceId)).accepted
+      ) {
+        return confirmPublishTab(experienceId, patched.status);
+      }
     }
+    state = await readPublishState(experienceId);
   }
 
-  state = await readPublishState(experienceId);
+  if (state.accepted) {
+    return confirmPublishTab(experienceId, published.status);
+  }
+
   return {
     ok: false,
     status: 502,
-    message: `Backend publish did not change status (still “${state.raw}”). POST /organizer/experiences/:id/publish needs to set status to “published”.`,
+    message: `Backend publish did not change status (still “${state.raw}”). Expected “published” or “pending_review”.`,
   };
 }
 
@@ -263,13 +274,38 @@ export function savedAtLabelNow(timezone = "Africa/Lagos"): string {
   }
 }
 
+export type TicketTypeWriteInput = {
+  name?: string;
+  priceAmount?: number;
+  quantityTotal?: number;
+  guestsPerTicket?: number;
+  description?: string;
+};
+
 export function createTicketTypeOnExperience(
   experienceId: string,
-  input: { name: string; priceAmount: number; quantityTotal: number },
+  input: {
+    name: string;
+    priceAmount: number;
+    quantityTotal: number;
+    guestsPerTicket?: number;
+    description?: string;
+  },
 ): Promise<ApiResult<TicketType>> {
   return organizerFetch<TicketType>(
     `/experiences/${experienceId}/ticket-types`,
     { method: "POST", body: input },
+  );
+}
+
+export function updateTicketTypeOnExperience(
+  experienceId: string,
+  ticketTypeId: string,
+  input: TicketTypeWriteInput,
+): Promise<ApiResult<TicketType>> {
+  return organizerFetch<TicketType>(
+    `/experiences/${experienceId}/ticket-types/${ticketTypeId}`,
+    { method: "PATCH", body: input },
   );
 }
 
@@ -287,4 +323,90 @@ const UUID_RE =
 
 export function isPersistedTicketId(id: string): boolean {
   return UUID_RE.test(id);
+}
+
+export type CoverUploadResponse = {
+  coverImageUrl?: string | null;
+};
+
+const COVER_MAX_BYTES = 8 * 1024 * 1024;
+const COVER_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+export function coverMetaFromFile(file: File): string {
+  const kind =
+    file.type === "image/png"
+      ? "PNG"
+      : file.type === "image/webp"
+        ? "WebP"
+        : "JPG";
+  const mb = file.size / (1024 * 1024);
+  const size =
+    mb >= 0.1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+  return `Uploaded cover · ${kind} · ${size}`;
+}
+
+export function validateCoverFile(file: File): string | null {
+  if (!COVER_TYPES.has(file.type)) {
+    return "Use a JPG, PNG, or WebP image.";
+  }
+  if (file.size > COVER_MAX_BYTES) {
+    return "Cover image must be 8 MB or smaller.";
+  }
+  if (file.size === 0) {
+    return "That file looks empty.";
+  }
+  return null;
+}
+
+/** `POST /api/organizer/experiences/:id/cover` multipart `file`. */
+export async function uploadExperienceCover(
+  experienceId: string,
+  file: File,
+): Promise<ApiResult<CoverUploadResponse>> {
+  const invalid = validateCoverFile(file);
+  if (invalid) {
+    return { ok: false, status: 400, message: invalid };
+  }
+
+  const body = new FormData();
+  body.set("file", file, file.name || "cover");
+
+  let response: Response;
+  try {
+    response = await fetch(`/api/organizer/experiences/${experienceId}/cover`, {
+      method: "POST",
+      body,
+      cache: "no-store",
+    });
+  } catch {
+    return {
+      ok: false,
+      status: 502,
+      message: "Couldn't reach the server. Try again.",
+    };
+  }
+
+  const text = await response.text();
+  let parsed: unknown;
+  try {
+    parsed = text ? JSON.parse(text) : undefined;
+  } catch {
+    parsed = undefined;
+  }
+
+  if (!response.ok) {
+    const message =
+      parsed &&
+      typeof parsed === "object" &&
+      typeof (parsed as { message?: unknown }).message === "string"
+        ? (parsed as { message: string }).message
+        : "Couldn't upload the cover image.";
+    return { ok: false, status: response.status, message };
+  }
+
+  return {
+    ok: true,
+    status: response.status,
+    data: (parsed ?? {}) as CoverUploadResponse,
+  };
 }

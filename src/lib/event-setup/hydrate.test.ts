@@ -37,7 +37,7 @@ describe("experienceToDraft", () => {
     expect(draft.experienceId).toBe("exp-99");
     expect(draft.title).toBe("Sound/Scape");
     expect(draft.description).toBe("A night of sound");
-    expect(draft.category).toBe("Music & nightlife");
+    expect(draft.category).toBe("Music");
     expect(draft.venueName).toBe("The Yard");
     expect(draft.address).toBe("12 Broad St");
     expect(draft.city).toBe("Lagos");

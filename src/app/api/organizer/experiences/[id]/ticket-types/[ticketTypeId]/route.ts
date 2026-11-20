@@ -35,14 +35,25 @@ export async function PATCH(request: Request, { params }: Params) {
   if (typeof parsed.body.quantityTotal === "number") {
     body.quantityTotal = parsed.body.quantityTotal;
   }
+  if (typeof parsed.body.guestsPerTicket === "number") {
+    body.guestsPerTicket = parsed.body.guestsPerTicket;
+  }
+  if (typeof parsed.body.description === "string") {
+    body.description = parsed.body.description.trim();
+  }
 
   if (
     body.name === undefined &&
     body.priceAmount === undefined &&
-    body.quantityTotal === undefined
+    body.quantityTotal === undefined &&
+    body.guestsPerTicket === undefined &&
+    body.description === undefined
   ) {
     return Response.json(
-      { message: "Provide name, priceAmount or quantityTotal to update." },
+      {
+        message:
+          "Provide name, priceAmount, quantityTotal, guestsPerTicket or description to update.",
+      },
       { status: 400 },
     );
   }
@@ -61,6 +72,8 @@ export async function PATCH(request: Request, { params }: Params) {
     name: body.name,
     price: body.priceAmount,
     quantity: body.quantityTotal,
+    guestsPerTicket: body.guestsPerTicket,
+    description: body.description,
   });
 
   return Response.json(ticket ?? { id: ticketTypeId, ...body }, {

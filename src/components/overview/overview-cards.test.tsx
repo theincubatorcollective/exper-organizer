@@ -122,15 +122,16 @@ describe("LiveEventCard", () => {
     expect(screen.getByText("checked in / 3,200 attendees")).toBeInTheDocument();
   });
 
-  test("without a cover image there is a placeholder, not a broken image", () => {
+  test("without a cover image falls back to a local cover asset", () => {
     const { container } = render(
       <LiveEventCard
         hero={{ ...liveHero, detail: { ...liveHero.detail, coverImageUrl: null } }}
         activeNow={1}
       />,
     );
-    expect(container.querySelector("img")).toBeNull();
-    expect(container.querySelector("[data-cover-placeholder]")).not.toBeNull();
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src")).toMatch(/^\/(events|overview)\//);
   });
 
   test("a venue with no name or address still reads cleanly", () => {

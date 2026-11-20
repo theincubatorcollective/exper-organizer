@@ -46,9 +46,16 @@ describe("Settings", () => {
     renderSettings();
     expect(screen.getByRole("heading", { name: "Security" })).toBeInTheDocument();
     expect(screen.getByText("Two-step verification")).toBeInTheDocument();
+    expect(screen.getAllByText("Active sessions").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Sign-in alerts").length).toBeGreaterThan(0);
     expect(
-      screen.getAllByText("Not available from the organizer API yet.").length,
+      screen.getAllByText("Email when a new device signs in.").length,
     ).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Save security" })).toBeEnabled();
+    expect(screen.getByText("This device")).toBeInTheDocument();
+    expect(screen.getByText("Current")).toBeInTheDocument();
+    expect(screen.getByText("Unknown device")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
 
     expect(
       screen.getByRole("heading", { name: "Notification delivery" }),
@@ -70,5 +77,19 @@ describe("Settings", () => {
     const daily = screen.getByRole("button", { name: "Off" });
     await user.click(daily);
     expect(screen.queryByRole("button", { name: "Off" })).not.toBeInTheDocument();
+  });
+
+  test("sign-in alerts toggle flips before save", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+    const save = screen.getByRole("button", { name: "Save security" });
+    const toggleRow = save.previousElementSibling as HTMLElement | null;
+    expect(toggleRow).toBeTruthy();
+    const toggle = toggleRow!.querySelector(
+      'button[aria-pressed="true"]',
+    ) as HTMLButtonElement | null;
+    expect(toggle).toBeTruthy();
+    await user.click(toggle!);
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
   });
 });

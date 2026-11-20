@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { buttonClasses } from "@/components/auth/Button";
+import { eventCoverSrc } from "@/lib/events/cover";
 import { formatEventWindow, utcOffset } from "@/lib/overview/format";
 import type { Overview } from "@/lib/overview/types";
 import { Card } from "./Card";
@@ -22,22 +23,15 @@ export function LiveEventCard({
   ]
     .filter(Boolean)
     .join(" · ");
+  const coverSrc = eventCoverSrc(detail.coverImageUrl, event.id);
 
   return (
     <Card className="grid gap-6 md:grid-cols-[minmax(0,min(100%,280px))_1fr] md:items-start">
       <div className="min-w-0">
         <div className="aspect-[3/2] overflow-hidden rounded-2xl bg-surface-2">
-          {detail.coverImageUrl ? (
-            // Decorative: the event title beside it names the card.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={detail.coverImageUrl}
-              alt=""
-              className="size-full object-cover"
-            />
-          ) : (
-            <div data-cover-placeholder className="size-full" />
-          )}
+          {/* Decorative: the event title beside it names the card. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={coverSrc} alt="" className="size-full object-cover" />
         </div>
         {place ? <p className="mt-3 text-[11px] text-muted">{place}</p> : null}
       </div>

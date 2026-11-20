@@ -21,6 +21,8 @@ export type TicketTypeWriteBody = {
   name?: string;
   priceAmount?: number;
   quantityTotal?: number;
+  guestsPerTicket?: number;
+  description?: string;
 };
 
 export type TicketTypeResponse = {
